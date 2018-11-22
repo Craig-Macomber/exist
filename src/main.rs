@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
+extern crate byteorder;
 extern crate serde;
 extern crate serde_cbor;
 extern crate serde_json;
@@ -109,30 +110,22 @@ mod test_data {
     impl Tree for Color {
         type Value = u8;
         fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            let id = Id {
-                id: [1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8],
-            };
-
-            visit_field(v, &self.r, id.clone());
-            visit_field(v, &self.g, id.clone());
-            visit_field(v, &self.b, id.clone());
-            visit_field(v, &self.a, id.clone());
+            visit_field(v, &self.r, Id { id: 7383786837 });
+            visit_field(v, &self.g, Id { id: 4525787583 });
+            visit_field(v, &self.b, Id { id: 3787388378 });
+            visit_field(v, &self.a, Id { id: 7837387833 });
         }
     }
 
     impl Named for Color {
         fn get_id() -> Id {
-            Id {
-                id: [1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8],
-            }
+            Id { id: 2 }
         }
     }
 
     impl Named for TestData {
         fn get_id() -> Id {
-            Id {
-                id: [1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8],
-            }
+            Id { id: 1 }
         }
     }
 }
@@ -140,11 +133,12 @@ mod test_data {
 // Tools for making types viewable as Tree<Value = u8> suitable for persistance as self describing data
 mod self_describing_tree_view {
     use super::{Tree, Visitor};
+    use byteorder::WriteBytesExt;
 
     // A Field ID or Type ID
     #[derive(Debug, Eq, PartialEq, Clone)]
     pub struct Id {
-        pub id: [u8; 16],
+        pub id: u128,
     }
 
     pub trait Named {
@@ -178,17 +172,17 @@ mod self_describing_tree_view {
         type Value = u8;
 
         fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            for u in &self.id {
-                v.visit_value(u.clone());
+            let mut wtr = vec![];
+            wtr.write_u128::<byteorder::LittleEndian>(self.id).unwrap();
+            for u in wtr {
+                v.visit_value(u);
             }
         }
     }
 
     impl Named for u8 {
         fn get_id() -> Id {
-            Id {
-                id: [1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8],
-            }
+            Id { id: 368573854 }
         }
     }
 
