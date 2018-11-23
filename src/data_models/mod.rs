@@ -78,24 +78,17 @@ pub mod leaf_tree {
         T: View<Value = V>,
         V: Clone,
     {
-        struct Copier<V> {
-            out: Vec<Concrete<V>>,
-        }
-
-        impl<V> Visitor for Copier<V> {
+        impl<V> Visitor for Vec<Concrete<V>> {
             type Value = V;
             fn visit_list<T: View<Value = V>>(&mut self, t: &T) {
-                self.out
-                    .push(Concrete::List(t.apply(Copier { out: vec![] }).out));
+                self.push(Concrete::List(t.apply(vec![])));
             }
             fn visit_value(&mut self, v: V) {
-                self.out.push(Concrete::Value(v));
+                self.push(Concrete::Value(v));
             }
         }
 
-        let mut d = Copier { out: vec![] };
-        t.visit(&mut d);
-        return d.out.into_iter().nth(0).unwrap();
+        return t.apply(vec![]).into_iter().nth(0).unwrap();
     }
 }
 
