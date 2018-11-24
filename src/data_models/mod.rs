@@ -26,11 +26,6 @@ macro_rules! Visitable {
 ///
 /// Generally, LeafTrees are a simplifying encoding or view of a more semantic structure.
 pub mod leaf_tree {
-    pub enum Concrete<V> {
-        List(Vec<Concrete<V>>),
-        Value(V),
-    }
-
     Visitable!(View, Visitor, Value);
 
     pub trait Visitor {
@@ -43,60 +38,50 @@ pub mod leaf_tree {
         fn visit_value(&mut self, t: Self::Value);
     }
 
-    impl<Value> View for Concrete<Value>
-    where
-        Value: Clone,
-    {
-        type Value = Value;
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            match self {
-                Concrete::List(list) => {
-                    for c in list {
-                        v.visit_list(c);
+    pub mod concrete {
+        use super::*;
+        pub enum Concrete<V> {
+            List(Vec<Concrete<V>>),
+            Value(V),
+        }
+
+        impl<Value> View for Concrete<Value>
+        where
+            Value: Clone,
+        {
+            type Value = Value;
+            fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
+                match self {
+                    Concrete::List(list) => {
+                        for c in list {
+                            v.visit_list(c);
+                        }
                     }
-                }
-                Concrete::Value(value) => {
-                    v.visit_value(value.clone());
-                }
-            };
-        }
-    }
-
-    // Copy into the standard Concrete implementation
-    pub fn view_to_concrete<T, V>(t: T) -> Concrete<V>
-    where
-        T: View<Value = V>,
-        V: Clone,
-    {
-        impl<V> Visitor for Vec<Concrete<V>> {
-            type Value = V;
-            fn visit_list<T: View<Value = V>>(&mut self, t: &T) {
-                self.push(Concrete::List(t.apply(vec![])));
-            }
-            fn visit_value(&mut self, v: V) {
-                self.push(Concrete::Value(v));
+                    Concrete::Value(value) => {
+                        v.visit_value(value.clone());
+                    }
+                };
             }
         }
 
-        return t.apply(vec![]).into_iter().nth(0).unwrap();
-    }
-}
+        // Copy into the standard Concrete implementation
+        pub fn view_to_concrete<T, V>(t: &T) -> Concrete<V>
+        where
+            T: View<Value = V>,
+            V: Clone,
+        {
+            impl<V> Visitor for Vec<Concrete<V>> {
+                type Value = V;
+                fn visit_list<T: View<Value = V>>(&mut self, t: &T) {
+                    self.push(Concrete::List(t.apply(vec![])));
+                }
+                fn visit_value(&mut self, v: V) {
+                    self.push(Concrete::Value(v));
+                }
+            }
 
-/// Some data models between TypedValueTree and LeafTree that could be useful abstractions,
-/// but are currently unused.
-mod misc_data_models {
-    use std::collections::HashMap;
-
-    /// A n-ary tree where children are grouped into ordered sequences under keys.
-    /// All data (other than structure) is in the names.
-    pub struct NameTree<N> {
-        children: HashMap<N, Vec<NameTree<N>>>,
-    }
-
-    /// NameTree with type_names on the nodes.
-    pub struct TypedTree<TN, N> {
-        type_name: TN,
-        children: HashMap<N, Vec<TypedTree<TN, N>>>,
+            return t.apply(vec![]).into_iter().nth(0).unwrap();
+        }
     }
 }
 

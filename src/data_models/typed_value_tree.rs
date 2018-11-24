@@ -1,12 +1,9 @@
 //! TypedTree, but can store value direct in the nodes instead of just children.
 //!
-//! Associated types were getting too verbose. Shortened to:
+//! Types were getting too verbose. Shortened to:
 //! N = Name
-//!
-//! When listing all three, keep them in that order.
-//!
 //! V = Type parameter that is a Visitor
-//! T = Type parameter that is a Tree (might just be a value in a Tree though)
+//! T = Type parameter that is a Tree / Visitable
 
 Visitable!(TypeView, TypeVisitor, N);
 Visitable!(MapView, MapVisitor, N);
@@ -98,7 +95,7 @@ pub mod concrete {
     }
 
     /// Copy into the standard Concrete implementation
-    pub fn view_to_concrete<T, N>(t: T) -> Concrete<N>
+    pub fn view_to_concrete<T, N>(t: &T) -> Concrete<N>
     where
         T: TypeView<N = N>,
         N: Clone + Eq + Hash,
@@ -111,11 +108,7 @@ pub mod concrete {
             Copier { t }
         }
 
-        type Co<N> = Copier<Option<Concrete<N>>>;
-        type Cm<N> = Copier<HashMap<N, Vec<Concrete<N>>>>;
-        type Cv<N> = Copier<Vec<Concrete<N>>>;
-
-        impl<N> TypeVisitor for Co<N>
+        impl<N> TypeVisitor for Copier<Option<Concrete<N>>>
         where
             N: Clone + Eq + Hash,
         {
@@ -134,7 +127,7 @@ pub mod concrete {
             }
         }
 
-        impl<N> MapVisitor for Cm<N>
+        impl<N> MapVisitor for Copier<HashMap<N, Vec<Concrete<N>>>>
         where
             N: Clone + Eq + Hash,
         {
@@ -145,7 +138,7 @@ pub mod concrete {
             }
         }
 
-        impl<N> ListVisitor for Cv<N>
+        impl<N> ListVisitor for Copier<Vec<Concrete<N>>>
         where
             N: Clone + Eq + Hash,
         {
