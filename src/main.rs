@@ -41,170 +41,7 @@ fn main() {
     // );
 }
 
-/// Output tree looks like:
-/// TypedValue (List)
-///     TypeName (List)
-///         first byte (Value)
-///         ...
-///         16th byte (Value)
-///     Content (List)
-///         ...
-///
-/// If Content is Value:
-/// Content (List)
-///     first byte (Value)
-///     ...
-///     last byte (Value)
-///
-/// Content can have 0+ bytes
-///
-/// If Content is Struct/Map:
-/// Content (List)
-///     Map Marker (List) (needed so we can tell empty map from empty Value)
-///         first map entry (List)
-///             ChildName (List)
-///                 first byte (Value)
-///                 ...
-///                 16th byte (Value)
-///             Children List (List)
-///                 TypedValue (List) (structure recurses here)
-///
-/// Content can have 0+ map entries
-pub mod type_to_leaf {
-    use super::data_models::leaf_tree::{View, Visitor};
-    use super::data_models::typed_value_tree::{
-        ListView, ListVisitor, MapView, MapVisitor, TypeView, TypeVisitor,
-    };
-    use byteorder::WriteBytesExt;
-
-    struct ByteLister {
-        v: Vec<u8>,
-    }
-
-    fn make_byte_lister(n: u128) -> ByteLister {
-        let mut wtr = vec![];
-        wtr.write_u128::<byteorder::LittleEndian>(n).unwrap();
-        return ByteLister { v: wtr };
-    }
-
-    impl View for ByteLister {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            for u in self.v.iter() {
-                v.visit_value(*u);
-            }
-        }
-    }
-
-    impl<T> View for T
-    where
-        T: TypeView<N = u128>,
-    {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            let type_name = self.apply(TypeGetter(0u128));
-
-            // Type: list of bytes containing type's id
-            v.visit_list(&make_byte_lister(type_name.0));
-
-            // Content: List of map entries OR List of bytes if terminal type
-            v.visit_list(&ContentLister(self));
-
-            struct TypeGetter(u128);
-            impl TypeVisitor for TypeGetter {
-                type N = u128;
-
-                fn visit_map<T: MapView<N = Self::N>>(&mut self, type_name: &Self::N, _t: &T) {
-                    self.0 = *type_name;
-                }
-                fn visit_value(&mut self, type_name: &Self::N, _t: &Vec<u8>) {
-                    self.0 = *type_name;
-                }
-            }
-        }
-    }
-
-    struct ContentLister<T>(T);
-    impl<T> View for ContentLister<&T>
-    where
-        T: TypeView<N = u128>,
-    {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            self.0.visit(&mut ContentListerVisiter(v));
-
-            struct ContentListerVisiter<V>(V);
-            impl<V> TypeVisitor for ContentListerVisiter<&mut V>
-            where
-                V: Visitor<Value = u8>,
-            {
-                type N = u128;
-
-                fn visit_map<T: MapView<N = Self::N>>(&mut self, _type_name: &Self::N, t: &T) {
-                    // Map Marker
-                    self.0.visit_list(&MapLister(t));
-                }
-
-                fn visit_value(&mut self, _type_name: &Self::N, t: &Vec<u8>) {
-                    // Content:
-                    // List of bytes for terminal type
-                    self.0.visit_list(&ByteLister { v: t.clone() });
-                }
-            }
-        }
-    }
-
-    struct MapLister<T>(T);
-    impl<T> View for MapLister<&T>
-    where
-        T: MapView<N = u128>,
-    {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            self.0.visit(&mut MapListerVisiter(v));
-
-            struct MapListerVisiter<V>(V);
-            impl<V> MapVisitor for MapListerVisiter<&mut V>
-            where
-                V: Visitor<Value = u8>,
-            {
-                type N = u128;
-
-                fn visit<T: ListView<N = Self::N>>(&mut self, name: &Self::N, children: &T) {
-                    // Child Name / Map Key / Field Name: list of bytes containing name id
-                    self.0.visit_list(&make_byte_lister(*name));
-
-                    // Children List
-                    self.0.visit_list(&ChildLister(children));
-                }
-            }
-        }
-    }
-
-    struct ChildLister<T>(T);
-    impl<T> View for ChildLister<&T>
-    where
-        T: ListView<N = u128>,
-    {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            self.0.visit(&mut ChildListerVisiter(v));
-
-            struct ChildListerVisiter<V>(V);
-            impl<V> ListVisitor for ChildListerVisiter<&mut V>
-            where
-                V: Visitor<Value = u8>,
-            {
-                type N = u128;
-
-                fn visit<T: TypeView<N = Self::N>>(&mut self, child: &T) {
-                    // TypedValue
-                    self.0.visit_list(child);
-                }
-            }
-        }
-    }
-}
+pub mod type_to_leaf;
 
 // Design TODO:
 // Consider ways to lifetime extend View_s to enable incremental/lazy traversal and/or references to locations in trees
@@ -245,8 +82,120 @@ pub mod encoding {
     }
 }
 
+#[macro_use]
+mod into_typed_value_tree {
+    use super::data_models::typed_value_tree::{ListView, ListVisitor, MapVisitor, TypeView};
+
+    /// Implement this for Terminal / Primitive types to be treated as byte sequences
+    pub trait Terminal {
+        fn get_id() -> u128;
+        /// Must be platform independent
+        fn bytes(&self) -> Vec<u8>;
+    }
+
+    /// Implement this for Struct / Aggregate types
+    pub trait Struct {
+        fn get_id() -> u128;
+        fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V);
+    }
+
+    #[macro_export]
+    macro_rules! TypeViewForTerminal {
+        ( $Type:ty ) => {
+            impl TypeView for $Type {
+                type N = u128;
+
+                fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
+                    v.visit_value(&<Self as Terminal>::get_id(), &self.bytes());
+                }
+            }
+
+            impl Named for $Type {
+                fn get_id() -> u128 {
+                    <Self as Terminal>::get_id()
+                }
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! TypeViewForStruct {
+        ( $Type:ty ) => {
+            impl TypeView for $Type {
+                type N = u128;
+
+                fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
+                    v.visit_map(&<Self as Struct>::get_id(), self);
+                }
+            }
+
+            impl MapView for $Type {
+                type N = u128;
+
+                fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V) {
+                    <Self as Struct>::visit(self, v);
+                }
+            }
+
+            impl Named for $Type {
+                fn get_id() -> u128 {
+                    <Self as Struct>::get_id()
+                }
+            }
+        };
+    }
+
+    pub trait Named {
+        fn get_id() -> u128;
+    }
+
+    pub fn visit_single_field<T, V>(v: &mut V, name: &u128, t: &T)
+    where
+        T: TypeView<N = u128>,
+        V: MapVisitor<N = u128>,
+    {
+        v.visit(name, &ContentListerVisiter(t));
+
+        struct ContentListerVisiter<T>(T);
+        impl<T> ListView for ContentListerVisiter<&T>
+        where
+            T: TypeView<N = u128>,
+        {
+            type N = u128;
+            fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
+                v.visit(self.0);
+            }
+        }
+    }
+
+    // TODO: make this accept any IntoIterator not just Vec
+    pub fn visit_list_field<T, V>(v: &mut V, name: &u128, t: &Vec<T>)
+    where
+        T: TypeView<N = u128>,
+        V: MapVisitor<N = u128>,
+    {
+        v.visit(name, &ContentListerVisiter(t));
+
+        struct ContentListerVisiter<'a, T>(&'a Vec<T>);
+        impl<'a, T> ListView for ContentListerVisiter<'a, T>
+        where
+            T: TypeView<N = u128>,
+        {
+            type N = u128;
+            fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
+                for child in self.0 {
+                    v.visit(child);
+                }
+            }
+        }
+    }
+}
+
 mod test_data {
-    use super::into_typed_value_tree::Named;
+    use super::data_models::typed_value_tree::{MapView, MapVisitor, TypeView, TypeVisitor};
+    use super::into_typed_value_tree::{
+        visit_list_field, visit_single_field, Named, Struct, Terminal,
+    };
 
     #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
     pub struct TestData {
@@ -266,113 +215,39 @@ mod test_data {
         pub a: u8,
     }
 
-    // impl Tree for TestData {
-    //     type Value = u8;
-    //     fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-    //         for color in &self.colors {
-    //             v.visit_list(color);
-    //         }
-    //     }
-    // }
-
-    // impl Tree for Color {
-    //     type Value = u8;
-    //     fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-    //         visit_field(v, &self.r, Id { id: 7383786837 });
-    //         visit_field(v, &self.g, Id { id: 4525787583 });
-    //         visit_field(v, &self.b, Id { id: 3787388378 });
-    //         visit_field(v, &self.a, Id { id: 7837387833 });
-    //     }
-    // }
-
-    impl Named for Color {
-        fn get_id() -> u128 {
-            2
-        }
-    }
-
-    impl Named for TestData {
-        fn get_id() -> u128 {
-            1
-        }
-    }
-
-    impl Named for u8 {
+    TypeViewForTerminal!(u8);
+    impl Terminal for u8 {
         fn get_id() -> u128 {
             3
         }
-    }
-}
 
-mod into_typed_value_tree {
-    use super::data_models::typed_value_tree::{
-        ListView, ListVisitor, MapView, MapVisitor, TypeView, TypeVisitor,
-    };
-
-    use super::test_data::{Color, TestData};
-
-    pub trait Named {
-        fn get_id() -> u128;
-    }
-
-    impl TypeView for TestData {
-        type N = u128;
-
-        fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit_map(&Self::get_id(), self);
+        fn bytes(&self) -> Vec<u8> {
+            vec![*self]
         }
     }
 
-    impl MapView for TestData {
-        type N = u128;
+    TypeViewForStruct!(TestData);
+    impl Struct for TestData {
+        fn get_id() -> u128 {
+            1
+        }
 
-        fn visit<V: MapVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit(&1234u128, &self.colors);
+        fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V) {
+            visit_list_field(v, &1234u128, &self.colors);
         }
     }
 
-    impl ListView for Vec<Color> {
-        type N = u128;
-
-        fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
-            for child in self.iter() {
-                v.visit(child);
-            }
+    TypeViewForStruct!(Color);
+    impl Struct for Color {
+        fn get_id() -> u128 {
+            2
         }
-    }
 
-    impl ListView for u8 {
-        type N = u128;
-
-        fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit(self);
-        }
-    }
-
-    impl TypeView for Color {
-        type N = u128;
-
-        fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit_map(&Self::get_id(), self);
-        }
-    }
-
-    impl MapView for Color {
-        type N = u128;
-
-        fn visit<V: MapVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit(&1255454u128, &self.r);
-            v.visit(&1215334u128, &self.g);
-            v.visit(&1213534u128, &self.b);
-            v.visit(&1231354u128, &self.a);
-        }
-    }
-
-    impl TypeView for u8 {
-        type N = u128;
-
-        fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
-            v.visit_value(&Self::get_id(), &vec![*self]);
+        fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V) {
+            visit_single_field(v, &1255454u128, &self.r);
+            visit_single_field(v, &1215334u128, &self.g);
+            visit_single_field(v, &1213534u128, &self.b);
+            visit_single_field(v, &1231354u128, &self.a);
         }
     }
 }
