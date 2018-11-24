@@ -46,14 +46,12 @@ pub mod type_to_leaf {
         Base, ListView, ListVisitor, MapView, MapVisitor, TypeView, TypeVisitor,
     };
 
-    struct TypeToLeafTag {}
-
-    impl<T> View<TypeToLeafTag> for T
+    impl<T> View for T
     where
-        T: TypeView<TypeToLeafTag, TN = u128, CN = u128, Val = u8>,
+        T: TypeView<TN = u128, CN = u128, Val = u8>,
     {
         type Value = u8;
-        fn visit<V: Visitor<TypeToLeafTag, Value = u8>>(&self, v: &mut V) {
+        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
             //self.decoder.visit_root(&self.data, v);
         }
     }
@@ -67,8 +65,6 @@ pub mod type_to_leaf {
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
 
-    struct EncodeTag {}
-
     pub struct EncodedLeafTree<TDecoder, Value>
     where
         TDecoder: Decoder<Value = Value>,
@@ -80,21 +76,21 @@ pub mod encoding {
     // Implement this to define a way to deserialize leaf trees.
     pub trait Decoder {
         type Value;
-        fn visit_root<V: Visitor<EncodeTag, Value = Self::Value>>(&self, data: &Vec<u8>, v: &mut V);
+        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &Vec<u8>, v: &mut V);
     }
 
     // Implement this to define a way to serialize leaf trees.
     pub trait Encoder {
         type Value;
-        fn serialize<TView: View<EncodeTag, Value = Self::Value>>(&self, v: &TView) -> Vec<u8>;
+        fn serialize<TView: View<Value = Self::Value>>(&self, v: &TView) -> Vec<u8>;
     }
 
-    impl<TDecoder, Value> View<EncodeTag> for EncodedLeafTree<TDecoder, Value>
+    impl<TDecoder, Value> View for EncodedLeafTree<TDecoder, Value>
     where
         TDecoder: Decoder<Value = Value>,
     {
         type Value = Value;
-        fn visit<V: Visitor<EncodeTag, Value = Value>>(&self, v: &mut V) {
+        fn visit<V: Visitor<Value = Value>>(&self, v: &mut V) {
             self.decoder.visit_root(&self.data, v);
         }
     }
@@ -162,84 +158,64 @@ mod self_describing_tree_view2 {
     use super::self_describing_tree_view::Named;
     use super::test_data::{Color, TestData};
 
-    pub struct Tag {}
-
-    impl TypeView<Tag> for TestData {
+    impl TypeView for TestData {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit_map(&Self::get_id().id, self);
         }
     }
 
-    impl MapView<Tag> for TestData {
+    impl MapView for TestData {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: MapVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit(&1234u128, &self.colors);
         }
     }
 
-    impl ListView<Tag> for Vec<Color> {
+    impl ListView for Vec<Color> {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: ListVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             for child in self.iter() {
                 v.visit(child);
             }
         }
     }
 
-    impl ListView<Tag> for u8 {
+    impl ListView for u8 {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: ListVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit(self);
         }
     }
 
-    impl TypeView<Tag> for Color {
+    impl TypeView for Color {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit_map(&Self::get_id().id, self);
         }
     }
 
-    impl MapView<Tag> for Color {
+    impl MapView for Color {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: MapVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit(&1255454u128, &self.r);
             v.visit(&1215334u128, &self.g);
             v.visit(&1213534u128, &self.b);
@@ -247,15 +223,12 @@ mod self_describing_tree_view2 {
         }
     }
 
-    impl TypeView<Tag> for u8 {
+    impl TypeView for u8 {
         type TN = u128;
         type CN = u128;
         type Val = u8;
 
-        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
-            &self,
-            v: &mut V,
-        ) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
             v.visit_value(&Self::get_id().id, &vec![*self]);
         }
     }
