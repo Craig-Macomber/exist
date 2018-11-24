@@ -6,6 +6,7 @@ extern crate serde;
 extern crate serde_cbor;
 extern crate serde_json;
 
+#[macro_use]
 mod data_models;
 
 fn main() {
@@ -30,10 +31,32 @@ fn main() {
         "serde_cbor = {}",
         serde_cbor::to_vec(&data).unwrap().len() as f64 / bin_code_size
     );
-    println!(
-        "reflective = {}",
-        self_describing_tree_view::dump(data).len() as f64 / bin_code_size
-    );
+
+    data_models::typed_value_tree::view_to_concrete(data);
+
+    // println!(
+    //     "reflective = {}",
+    //     self_describing_tree_view::dump(data).len() as f64 / bin_code_size
+    // );
+}
+
+pub mod type_to_leaf {
+    use super::data_models::leaf_tree::{View, Visitor};
+    use super::data_models::typed_value_tree::{
+        Base, ListView, ListVisitor, MapView, MapVisitor, TypeView, TypeVisitor,
+    };
+
+    struct TypeToLeafTag {}
+
+    impl<T> View<TypeToLeafTag> for T
+    where
+        T: TypeView<TypeToLeafTag, TN = u128, CN = u128, Val = u8>,
+    {
+        type Value = u8;
+        fn visit<V: Visitor<TypeToLeafTag, Value = u8>>(&self, v: &mut V) {
+            //self.decoder.visit_root(&self.data, v);
+        }
+    }
 }
 
 // Design TODO:
@@ -43,6 +66,8 @@ fn main() {
 /// Does not implement any encodings, just declare the traits encoders and decoders will implement.
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
+
+    struct EncodeTag {}
 
     pub struct EncodedLeafTree<TDecoder, Value>
     where
@@ -55,21 +80,21 @@ pub mod encoding {
     // Implement this to define a way to deserialize leaf trees.
     pub trait Decoder {
         type Value;
-        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &Vec<u8>, v: &mut V);
+        fn visit_root<V: Visitor<EncodeTag, Value = Self::Value>>(&self, data: &Vec<u8>, v: &mut V);
     }
 
     // Implement this to define a way to serialize leaf trees.
     pub trait Encoder {
         type Value;
-        fn serialize<TView: View<Value = Self::Value>>(&self, v: &TView) -> Vec<u8>;
+        fn serialize<TView: View<EncodeTag, Value = Self::Value>>(&self, v: &TView) -> Vec<u8>;
     }
 
-    impl<TDecoder, Value> View for EncodedLeafTree<TDecoder, Value>
+    impl<TDecoder, Value> View<EncodeTag> for EncodedLeafTree<TDecoder, Value>
     where
         TDecoder: Decoder<Value = Value>,
     {
         type Value = Value;
-        fn visit<V: Visitor<Value = Value>>(&self, v: &mut V) {
+        fn visit<V: Visitor<EncodeTag, Value = Value>>(&self, v: &mut V) {
             self.decoder.visit_root(&self.data, v);
         }
     }
@@ -78,7 +103,7 @@ pub mod encoding {
 mod test_data {
     use super::data_models::leaf_tree::View as Tree;
     use super::data_models::leaf_tree::Visitor;
-    use super::self_describing_tree_view::{visit_field, Id, Named};
+    use super::self_describing_tree_view::{Id, Named};
 
     #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
     pub struct TestData {
@@ -98,24 +123,24 @@ mod test_data {
         pub a: u8,
     }
 
-    impl Tree for TestData {
-        type Value = u8;
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            for color in &self.colors {
-                v.visit_list(color);
-            }
-        }
-    }
+    // impl Tree for TestData {
+    //     type Value = u8;
+    //     fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
+    //         for color in &self.colors {
+    //             v.visit_list(color);
+    //         }
+    //     }
+    // }
 
-    impl Tree for Color {
-        type Value = u8;
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            visit_field(v, &self.r, Id { id: 7383786837 });
-            visit_field(v, &self.g, Id { id: 4525787583 });
-            visit_field(v, &self.b, Id { id: 3787388378 });
-            visit_field(v, &self.a, Id { id: 7837387833 });
-        }
-    }
+    // impl Tree for Color {
+    //     type Value = u8;
+    //     fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
+    //         visit_field(v, &self.r, Id { id: 7383786837 });
+    //         visit_field(v, &self.g, Id { id: 4525787583 });
+    //         visit_field(v, &self.b, Id { id: 3787388378 });
+    //         visit_field(v, &self.a, Id { id: 7837387833 });
+    //     }
+    // }
 
     impl Named for Color {
         fn get_id() -> Id {
@@ -126,6 +151,112 @@ mod test_data {
     impl Named for TestData {
         fn get_id() -> Id {
             Id { id: 1 }
+        }
+    }
+}
+
+mod self_describing_tree_view2 {
+    use super::data_models::typed_value_tree::{
+        Base, ListView, ListVisitor, MapView, MapVisitor, TypeView, TypeVisitor,
+    };
+    use super::self_describing_tree_view::Named;
+    use super::test_data::{Color, TestData};
+
+    pub struct Tag {}
+
+    impl TypeView<Tag> for TestData {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit_map(&Self::get_id().id, self);
+        }
+    }
+
+    impl MapView<Tag> for TestData {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: MapVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit(&1234u128, &self.colors);
+        }
+    }
+
+    impl ListView<Tag> for Vec<Color> {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: ListVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            for child in self.iter() {
+                v.visit(child);
+            }
+        }
+    }
+
+    impl ListView<Tag> for u8 {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: ListVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit(self);
+        }
+    }
+
+    impl TypeView<Tag> for Color {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit_map(&Self::get_id().id, self);
+        }
+    }
+
+    impl MapView<Tag> for Color {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: MapVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit(&1255454u128, &self.r);
+            v.visit(&1215334u128, &self.g);
+            v.visit(&1213534u128, &self.b);
+            v.visit(&1231354u128, &self.a);
+        }
+    }
+
+    impl TypeView<Tag> for u8 {
+        type TN = u128;
+        type CN = u128;
+        type Val = u8;
+
+        fn visit<V: TypeVisitor<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &self,
+            v: &mut V,
+        ) {
+            v.visit_value(&Self::get_id().id, &vec![*self]);
         }
     }
 }
@@ -146,40 +277,40 @@ mod self_describing_tree_view {
         fn get_id() -> Id;
     }
 
-    pub fn dump<T>(t: T) -> Vec<u8>
-    where
-        T: Tree<Value = u8> + Named,
-    {
-        struct Dumper {
-            out: Vec<u8>,
-        }
+    // pub fn dump<T>(t: T) -> Vec<u8>
+    // where
+    //     T: Tree<Value = u8> + Named,
+    // {
+    //     struct Dumper {
+    //         out: Vec<u8>,
+    //     }
 
-        impl Visitor for Dumper {
-            type Value = u8;
-            fn visit_list<T: Tree<Value = u8>>(&mut self, t: &T) {
-                t.visit::<Dumper>(self);
-            }
-            fn visit_value(&mut self, t: Self::Value) {
-                self.out.push(t);
-            }
-        }
+    //     impl Visitor for Dumper {
+    //         type Value = u8;
+    //         fn visit_list<T: Tree<Value = u8>>(&mut self, t: &T) {
+    //             t.visit::<Dumper>(self);
+    //         }
+    //         fn visit_value(&mut self, t: Self::Value) {
+    //             self.out.push(t);
+    //         }
+    //     }
 
-        let mut d = Dumper { out: vec![] };
-        visit_typed_value(&mut d, &t);
-        return d.out;
-    }
+    //     let mut d = Dumper { out: vec![] };
+    //     visit_typed_value(&mut d, &t);
+    //     return d.out;
+    // }
 
-    impl Tree for Id {
-        type Value = u8;
+    // impl Tree for Id {
+    //     type Value = u8;
 
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
-            let mut wtr = vec![];
-            wtr.write_u128::<byteorder::LittleEndian>(self.id).unwrap();
-            for u in wtr {
-                v.visit_value(u);
-            }
-        }
-    }
+    //     fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
+    //         let mut wtr = vec![];
+    //         wtr.write_u128::<byteorder::LittleEndian>(self.id).unwrap();
+    //         for u in wtr {
+    //             v.visit_value(u);
+    //         }
+    //     }
+    // }
 
     impl Named for u8 {
         fn get_id() -> Id {
@@ -187,68 +318,68 @@ mod self_describing_tree_view {
         }
     }
 
-    pub fn visit_field<'a, T, V: Visitor<Value = u8>>(v: &mut V, field: &'a T, id: Id)
-    where
-        &'a T: Tree<Value = u8>,
-        T: Tree<Value = u8> + Named, // TODO: why are both needed?
-    {
-        struct Field<'a, T>
-        where
-            &'a T: Tree<Value = u8>,
-            T: Named,
-        {
-            id: Id,
-            f: &'a T,
-        }
+    // pub fn visit_field<'a, T, V: Visitor<Value = u8>>(v: &mut V, field: &'a T, id: Id)
+    // where
+    //     &'a T: Tree<Value = u8>,
+    //     T: Tree<Value = u8> + Named, // TODO: why are both needed?
+    // {
+    //     struct Field<'a, T>
+    //     where
+    //         &'a T: Tree<Value = u8>,
+    //         T: Named,
+    //     {
+    //         id: Id,
+    //         f: &'a T,
+    //     }
 
-        impl<'a, T> Tree for Field<'a, T>
-        where
-            T: Tree<Value = u8> + Named,
-            &'a T: Tree<Value = u8>,
-        {
-            type Value = u8;
+    //     impl<'a, T> Tree for Field<'a, T>
+    //     where
+    //         T: Tree<Value = u8> + Named,
+    //         &'a T: Tree<Value = u8>,
+    //     {
+    //         type Value = u8;
 
-            fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-                v.visit_list(&self.id);
-                // nest f and its type name under another node
-                visit_typed_value(v, &self.f);
-            }
-        }
+    //         fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+    //             v.visit_list(&self.id);
+    //             // nest f and its type name under another node
+    //             visit_typed_value(v, &self.f);
+    //         }
+    //     }
 
-        let f = Field::<'a, T> { id: id, f: field };
-        v.visit_list(&f);
-    }
+    //     let f = Field::<'a, T> { id: id, f: field };
+    //     v.visit_list(&f);
+    // }
 
-    // TODO: make this the impl for T, and make a separate helper for content
-    fn visit_typed_value<'a, T, V: Visitor<Value = u8>>(v: &mut V, value: &'a T)
-    where
-        &'a T: Tree<Value = u8>,
-        T: Tree<Value = u8> + Named, // TODO: why are both needed?
-    {
-        struct NamedValue<'a, T>
-        where
-            &'a T: Tree<Value = u8>,
-            T: Named,
-        {
-            f: &'a T,
-        }
+    // // TODO: make this the impl for T, and make a separate helper for content
+    // fn visit_typed_value<'a, T, V: Visitor<Value = u8>>(v: &mut V, value: &'a T)
+    // where
+    //     &'a T: Tree<Value = u8>,
+    //     T: Tree<Value = u8> + Named, // TODO: why are both needed?
+    // {
+    //     struct NamedValue<'a, T>
+    //     where
+    //         &'a T: Tree<Value = u8>,
+    //         T: Named,
+    //     {
+    //         f: &'a T,
+    //     }
 
-        impl<'a, T> Tree for NamedValue<'a, T>
-        where
-            T: Tree<Value = u8> + Named,
-            &'a T: Tree<Value = u8>,
-        {
-            type Value = u8;
+    //     impl<'a, T> Tree for NamedValue<'a, T>
+    //     where
+    //         T: Tree<Value = u8> + Named,
+    //         &'a T: Tree<Value = u8>,
+    //     {
+    //         type Value = u8;
 
-            fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-                v.visit_list(&T::get_id());
-                v.visit_list(&self.f);
-            }
-        }
+    //         fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+    //             v.visit_list(&T::get_id());
+    //             v.visit_list(&self.f);
+    //         }
+    //     }
 
-        let f = NamedValue::<'a, T> { f: value };
-        v.visit_list(&f);
-    }
+    //     let f = NamedValue::<'a, T> { f: value };
+    //     v.visit_list(&f);
+    // }
 
     // trait StructType: Named {
     //     type ItemType;
@@ -291,21 +422,21 @@ mod self_describing_tree_view {
     //     }
     // }
 
-    impl Tree for u8 {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            v.visit_value(*self);
-        }
-    }
+    // impl Tree for u8 {
+    //     type Value = u8;
+    //     fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+    //         v.visit_value(*self);
+    //     }
+    // }
 
-    // TODO: why do we need this?
-    impl<T> Tree for &T
-    where
-        T: Tree<Value = u8>,
-    {
-        type Value = u8;
-        fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-            (*self).visit(v);
-        }
-    }
+    // // TODO: why do we need this?
+    // impl<T> Tree for &T
+    // where
+    //     T: Tree<Value = u8>,
+    // {
+    //     type Value = u8;
+    //     fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+    //         (*self).visit(v);
+    //     }
+    // }
 }

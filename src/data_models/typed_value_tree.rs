@@ -10,6 +10,7 @@
 //! V = Type parameter that is a Visitor
 //! T = Type parameter that is a Tree (might just be a value in a Tree though)
 
+use super::DefaultTag;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -33,7 +34,7 @@ where
 }
 
 /// Helper super trait for provide the associated types used in this module
-pub trait Base {
+pub trait Base<Tag> {
     type TN;
     type CN;
     type Val;
@@ -50,18 +51,18 @@ macro_rules! Associated {
 /// Provided Visitor should be a trait extending Base
 #[macro_export]
 macro_rules! Visitable2 {
-    ( $Name:ident,$Visitor:ident ) => {
-        Visitable!($Name, $Visitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>, Base;);
+    ( $Name:ident,$Visitor:ident) => {
+        Visitable!($Name, $Visitor, TN;CN;Val);
     };
 }
 
-Visitable2!(View, Visitor);
+Visitable2!(TypeView, TypeVisitor);
 Visitable2!(MapView, MapVisitor);
 Visitable2!(ListView, ListVisitor);
 
-pub trait Visitor: Base {
+pub trait TypeVisitor<Tag>: Base<Tag> {
     /// Called if the View was a Struct (map)
-    fn visit_map<T: MapView<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+    fn visit_map<T: MapView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
         &mut self,
         type_name: &Self::TN,
         t: &T,
@@ -72,26 +73,26 @@ pub trait Visitor: Base {
     fn visit_value(&mut self, type_name: &Self::TN, t: &Vec<Self::Val>);
 }
 
-pub trait MapVisitor: Base {
+pub trait MapVisitor<Tag>: Base<Tag> {
     /// Called for with value in the map
-    fn visit<T: ListView<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+    fn visit<T: ListView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
         &mut self,
         name: &Self::CN,
         children: &T,
     );
 }
 
-pub trait ListVisitor: Base {
+pub trait ListVisitor<Tag>: Base<Tag> {
     /// Called for with value in the children list in order
-    fn visit<T: View<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&mut self, child: &T);
+    fn visit<T: TypeView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&mut self, child: &T);
 }
 
-/// implements Base for T.
+/// Helper for reducing boilerplate when implementing Visitable traits (TypeView, MapView, ListView)
 /// T must use type parameters <TN, CN, Val>
 #[macro_export]
-macro_rules! ImplBase {
-    ( $T:ty ) => {
-        impl<TN, CN, Val> Base for $T
+macro_rules! ImplVisitable {
+    ( $Visitable:ident, $Tag:ty, $T:ty, $Visitor:ident, $V:expr ) => {
+        impl<TN, CN, Val> $Visitable<$Tag> for $T
         where
             Val: Clone,
             CN: Eq + Hash,
@@ -99,39 +100,22 @@ macro_rules! ImplBase {
             type TN = TN;
             type CN = CN;
             type Val = Val;
-        }
-    };
-}
 
-/// Helper for reducing boilerplate when implementing Visitable traits (View, MapView, ListView)
-/// T must use type parameters <TN, CN, Val>
-#[macro_export]
-macro_rules! ImplVisitable {
-    ( $Visitable:ty, $T:ty, $Visitor:ident, $V:expr ) => {
-        impl<Val, TN, CN> $Visitable for $T
-        where
-            Val: Clone,
-            CN: Eq + Hash,
-        {
-            fn visit<V: $Visitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+            fn visit<V: $Visitor<$Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+                &self,
+                v: &mut V,
+            ) {
                 $V(self, v);
             }
         }
     };
 }
 
-#[macro_export]
-macro_rules! ImplVisitableAndBase {
-    ( $Visitable:ty, $T:ty, $Visitor:ident, $V:expr ) => {
-        ImplBase!($T);
-        ImplVisitable!($Visitable, $T, $Visitor, $V);
-    };
-}
-
-ImplVisitableAndBase!(
-    View,
+ImplVisitable!(
+    TypeView,
+    DefaultTag,
     Concrete<TN, CN, Val>,
-    Visitor,
+    TypeVisitor,
     |this: &Self, v: &mut V| -> () {
         match &this.content {
             StructOrValue::Struct(map) => {
@@ -144,8 +128,9 @@ ImplVisitableAndBase!(
     }
 );
 
-ImplVisitableAndBase!(
+ImplVisitable!(
     MapView,
+    DefaultTag,
     HashMap<CN, Vec<Concrete<TN, CN, Val>>>,
     MapVisitor,
     |this: &Self, v: &mut V| -> () {
@@ -155,8 +140,9 @@ ImplVisitableAndBase!(
     }
 );
 
-ImplVisitableAndBase!(
+ImplVisitable!(
     ListView,
+    DefaultTag,
     Vec<Concrete<TN, CN, Val>>,
     ListVisitor,
     |this: &Self, v: &mut V| -> () {
@@ -166,69 +152,152 @@ ImplVisitableAndBase!(
     }
 );
 
+// impl<TN, CN, Val> TypeView for Concrete<TN, CN, Val>
+// where
+//     Val: Clone,
+//     CN: Eq + Hash,
+// {
+//     fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+//         match &self.content {
+//             StructOrValue::Struct(map) => {
+//                 v.visit_map(&self.type_name, map);
+//             }
+//             StructOrValue::Val(value) => {
+//                 v.visit_value(&self.type_name, value);
+//             }
+//         };
+//     }
+// }
+
+// impl<Val, TN, CN> MapView for HashMap<CN, Vec<Concrete<TN, CN, Val>>>
+// where
+//     Val: Clone,
+//     CN: Eq + Hash,
+// {
+//     fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+//         for (k, children) in self.iter() {
+//             v.visit(&k, children);
+//         }
+//     }
+// }
+
+// impl<Val, TN, CN> ListView for Vec<Concrete<TN, CN, Val>>
+// where
+//     Val: Clone,
+//     CN: Eq + Hash,
+// {
+//     fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+//         for child in self.iter() {
+//             v.visit(child);
+//         }
+//     }
+// }
+
 /// Copy into the standard Concrete implementation
-pub fn view_to_concrete<T, TN, CN, Val>(t: T) -> Concrete<TN, CN, Val>
+pub fn view_to_concrete<T, Tag, TN, CN, Val>(t: T) -> Concrete<TN, CN, Val>
 where
-    T: View<Val = Val, TN = TN, CN = CN>,
+    T: TypeView<Tag, Val = Val, TN = TN, CN = CN>,
     Val: Clone,
     TN: Clone,
     CN: Clone + Eq + Hash,
 {
-    type Copier<TN, CN, Val> = Option<Concrete<TN, CN, Val>>;
+    struct Copier<T> {
+        t: T,
+    }
 
-    ImplBase!(Copier<TN, CN, Val>);
+    fn copier<T>(t: T) -> Copier<T> {
+        Copier { t }
+    }
 
-    impl<TN, CN, Val> Visitor for Copier<TN, CN, Val>
+    type Co<TN, CN, Val> = Copier<Option<Concrete<TN, CN, Val>>>;
+    type Cm<TN, CN, Val> = Copier<HashMap<CN, Vec<Concrete<TN, CN, Val>>>>;
+    type Cv<TN, CN, Val> = Copier<Vec<Concrete<TN, CN, Val>>>;
+
+    impl<Tag, TN, CN, Val> Base<Tag> for Co<TN, CN, Val>
+    where
+        Val: Clone,
+        CN: Eq + Hash,
+    {
+        type TN = TN;
+        type CN = CN;
+        type Val = Val;
+    }
+
+    impl<Tag, TN, CN, Val> Base<Tag> for Cm<TN, CN, Val>
+    where
+        Val: Clone,
+        CN: Eq + Hash,
+    {
+        type TN = TN;
+        type CN = CN;
+        type Val = Val;
+    }
+
+    impl<Tag, TN, CN, Val> Base<Tag> for Cv<TN, CN, Val>
+    where
+        Val: Clone,
+        CN: Eq + Hash,
+    {
+        type TN = TN;
+        type CN = CN;
+        type Val = Val;
+    }
+
+    impl<Tag, TN, CN, Val> TypeVisitor<Tag> for Co<TN, CN, Val>
     where
         Val: Clone,
         TN: Clone,
         CN: Clone + Eq + Hash,
     {
-        fn visit_map<T: MapView<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+        fn visit_map<T: MapView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
             &mut self,
             type_name: &Self::TN,
             t: &T,
         ) {
-            *self = Some(Concrete {
+            self.t = Some(Concrete {
                 type_name: type_name.clone(),
-                content: StructOrValue::Struct(t.apply(HashMap::new())),
+                content: StructOrValue::Struct(t.apply(copier(HashMap::new())).t),
             });
         }
         fn visit_value(&mut self, type_name: &Self::TN, t: &Vec<Self::Val>) {
-            *self = Some(Concrete {
+            self.t = Some(Concrete {
                 type_name: type_name.clone(),
                 content: StructOrValue::Val(t.clone()),
             })
         }
     }
 
-    impl<TN, CN, Val> MapVisitor for HashMap<CN, Vec<Concrete<TN, CN, Val>>>
+    impl<Tag, TN, CN, Val> MapVisitor<Tag> for Cm<TN, CN, Val>
     where
         Val: Clone,
         TN: Clone,
         CN: Clone + Eq + Hash,
     {
-        fn visit<T: ListView<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+        fn visit<T: ListView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
             &mut self,
             name: &Self::CN,
             children: &T,
         ) {
-            self.insert(name.clone(), children.apply(vec![]));
+            self.t
+                .insert(name.clone(), children.apply(copier(vec![])).t);
         }
     }
 
-    impl<TN, CN, Val> ListVisitor for Vec<Concrete<TN, CN, Val>>
+    impl<Tag, TN, CN, Val> ListVisitor<Tag> for Cv<TN, CN, Val>
     where
         Val: Clone,
         TN: Clone,
         CN: Clone + Eq + Hash,
     {
-        fn visit<T: View<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&mut self, child: &T) {
-            self.push(child.apply(None).unwrap());
+        fn visit<T: TypeView<Tag, TN = Self::TN, CN = Self::CN, Val = Self::Val>>(
+            &mut self,
+            child: &T,
+        ) {
+            self.t.push(child.apply(copier(None)).t.unwrap());
         }
     }
 
-    return t.apply(None).unwrap();
+    return t.apply(copier(None)).t.unwrap();
 }
 
 #[cfg(test)]

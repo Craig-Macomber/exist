@@ -8,11 +8,11 @@
 
 #[macro_export]
 macro_rules! Visitable {
-    ( $Name:ident,$Visitor:path, $($SuperTrait:ident)*; $($Items:ident);* ) => {
-        pub trait $Name: $($SuperTrait)* {
+    ( $Name:ident, $Visitor:ident, $($Items:ident);* ) => {
+        pub trait $Name<Tag> {
             $(type $Items;)*
-            fn visit<V: $Visitor>(&self, v: &mut V);
-            fn apply<V: $Visitor>(&self, mut v: V) -> V {
+            fn visit<V: $Visitor<Tag, $($Items = Self::$Items),*>>(&self, v: &mut V);
+            fn apply<V: $Visitor<Tag, $($Items = Self::$Items),*>>(&self, mut v: V) -> V {
                 self.visit(&mut v);
                 return v;
             }
@@ -20,35 +20,39 @@ macro_rules! Visitable {
     };
 }
 
+struct DefaultTag {}
+
 /// A n-ary tree with data (other than structure) only in the leaves.
 /// This is the simplest concrete implementation, but the same name may be used for
 /// the concept and/or interfaces sharing this data-model.
 ///
 /// Generally, LeafTrees are a simplifying encoding or view of a more semantic structure.
 pub mod leaf_tree {
+    use super::DefaultTag;
+
     pub enum Concrete<V> {
         List(Vec<Concrete<V>>),
         Value(V),
     }
 
-    Visitable!(View, Visitor<Value = Self::Value>,; Value);
+    Visitable!(View, Visitor, Value);
 
-    pub trait Visitor {
+    pub trait Visitor<Tag> {
         type Value;
 
         /// Called for with each child in order when visiting a list node
-        fn visit_list<T: View<Value = Self::Value>>(&mut self, t: &T);
+        fn visit_list<T: View<Tag, Value = Self::Value>>(&mut self, t: &T);
 
         /// Called once with the value when visiting a value node
         fn visit_value(&mut self, t: Self::Value);
     }
 
-    impl<Value> View for Concrete<Value>
+    impl<Value> View<DefaultTag> for Concrete<Value>
     where
         Value: Clone,
     {
         type Value = Value;
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V) {
+        fn visit<V: Visitor<DefaultTag, Value = Self::Value>>(&self, v: &mut V) {
             match self {
                 Concrete::List(list) => {
                     for c in list {
@@ -63,14 +67,14 @@ pub mod leaf_tree {
     }
 
     // Copy into the standard Concrete implementation
-    pub fn view_to_concrete<T, V>(t: T) -> Concrete<V>
+    pub fn view_to_concrete<Tag, T, V>(t: T) -> Concrete<V>
     where
-        T: View<Value = V>,
+        T: View<Tag, Value = V>,
         V: Clone,
     {
-        impl<V> Visitor for Vec<Concrete<V>> {
+        impl<Tag, V> Visitor<Tag> for Vec<Concrete<V>> {
             type Value = V;
-            fn visit_list<T: View<Value = V>>(&mut self, t: &T) {
+            fn visit_list<T: View<Tag, Value = V>>(&mut self, t: &T) {
                 self.push(Concrete::List(t.apply(vec![])));
             }
             fn visit_value(&mut self, v: V) {
@@ -100,4 +104,5 @@ mod misc_data_models {
     }
 }
 
+#[macro_use]
 pub mod typed_value_tree;
