@@ -32,7 +32,7 @@ fn main() {
         serde_cbor::to_vec(&data).unwrap().len() as f64 / bin_code_size
     );
 
-    data_models::typed_value_tree::view_to_concrete(data);
+    data_models::typed_value_tree::concrete::view_to_concrete(data);
 
     // println!(
     //     "reflective = {}",
@@ -48,7 +48,7 @@ pub mod type_to_leaf {
 
     impl<T> View for T
     where
-        T: TypeView<TN = u128, CN = u128, Val = u8>,
+        T: TypeView<TN = u128, CN = u128>,
     {
         type Value = u8;
         fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
@@ -161,9 +161,8 @@ mod self_describing_tree_view2 {
     impl TypeView for TestData {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit_map(&Self::get_id().id, self);
         }
     }
@@ -171,9 +170,8 @@ mod self_describing_tree_view2 {
     impl MapView for TestData {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit(&1234u128, &self.colors);
         }
     }
@@ -181,9 +179,8 @@ mod self_describing_tree_view2 {
     impl ListView for Vec<Color> {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             for child in self.iter() {
                 v.visit(child);
             }
@@ -193,9 +190,8 @@ mod self_describing_tree_view2 {
     impl ListView for u8 {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: ListVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit(self);
         }
     }
@@ -203,9 +199,8 @@ mod self_describing_tree_view2 {
     impl TypeView for Color {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit_map(&Self::get_id().id, self);
         }
     }
@@ -213,9 +208,8 @@ mod self_describing_tree_view2 {
     impl MapView for Color {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: MapVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit(&1255454u128, &self.r);
             v.visit(&1215334u128, &self.g);
             v.visit(&1213534u128, &self.b);
@@ -226,9 +220,8 @@ mod self_describing_tree_view2 {
     impl TypeView for u8 {
         type TN = u128;
         type CN = u128;
-        type Val = u8;
 
-        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN, Val = Self::Val>>(&self, v: &mut V) {
+        fn visit<V: TypeVisitor<TN = Self::TN, CN = Self::CN>>(&self, v: &mut V) {
             v.visit_value(&Self::get_id().id, &vec![*self]);
         }
     }
