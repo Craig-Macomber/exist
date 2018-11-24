@@ -1,18 +1,23 @@
-///! Data Models used in this library.
-///! Since there is no single Trait that an object will implement to expose itself as one of these data models,
-///! the names for the models are used by nested modules.
-///! Each nested module contains a reference concrete implementations with minimal complexity
-///! as well as traits for generic implementations/adapters based on the visitor pattern.
-///!
-///! These modules do not depend on each other, and adapters/converts are separate.
+//! Data Models used in this library.
+//! Since there is no single Trait that an object will implement to expose itself as one of these data models,
+//! the names for the models are used by nested modules.
+//! Each nested module contains a reference concrete implementations with minimal complexity
+//! as well as traits for generic implementations/adapters based on the visitor pattern.
+//!
+//! These modules do not depend on each other, and adapters/converts are separate.
 
-/// Helper type visiting
-trait Visitable<VisitorType> {
-    fn visit(&self, v: &mut VisitorType);
-    fn apply(&self, mut v: VisitorType) -> VisitorType {
-        self.visit(&mut v);
-        return v;
-    }
+#[macro_export]
+macro_rules! Visitable {
+    ( $Name:ident,$Visitor:path, $($SuperTrait:ident)*; $($Items:ident);* ) => {
+        pub trait $Name: $($SuperTrait)* {
+            $(type $Items;)*
+            fn visit<V: $Visitor>(&self, v: &mut V);
+            fn apply<V: $Visitor>(&self, mut v: V) -> V {
+                self.visit(&mut v);
+                return v;
+            }
+        }
+    };
 }
 
 /// A n-ary tree with data (other than structure) only in the leaves.
@@ -21,17 +26,12 @@ trait Visitable<VisitorType> {
 ///
 /// Generally, LeafTrees are a simplifying encoding or view of a more semantic structure.
 pub mod leaf_tree {
-    use super::Visitable;
-
     pub enum Concrete<V> {
         List(Vec<Concrete<V>>),
         Value(V),
     }
 
-    pub trait View {
-        type Value;
-        fn visit<V: Visitor<Value = Self::Value>>(&self, v: &mut V);
-    }
+    Visitable!(View, Visitor<Value = Self::Value>,; Value);
 
     pub trait Visitor {
         type Value;
@@ -41,16 +41,6 @@ pub mod leaf_tree {
 
         /// Called once with the value when visiting a value node
         fn visit_value(&mut self, t: Self::Value);
-    }
-
-    impl<T, Value, Vis> Visitable<Vis> for T
-    where
-        T: View<Value = Value>,
-        Vis: Visitor<Value = Value>,
-    {
-        fn visit(&self, v: &mut Vis) {
-            T::visit(&self, v);
-        }
     }
 
     impl<Value> View for Concrete<Value>
