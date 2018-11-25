@@ -9,6 +9,8 @@ extern crate serde_json;
 #[macro_use]
 mod data_models;
 
+use self::encoding::*;
+
 fn main() {
     let colors = vec![
         test_data::Color {
@@ -35,10 +37,10 @@ fn main() {
     data_models::typed_value_tree::concrete::view_to_concrete(&data);
     data_models::leaf_tree::concrete::view_to_concrete(&data);
 
-    // println!(
-    //     "exist = {}",
-    //     self_describing_tree_view::dump(data).len() as f64 / bin_code_size
-    // );
+    println!(
+        "exist = {}",
+        encoding::BasicEncoding.serialize(&data).len() as f64 / bin_code_size
+    );
 }
 
 pub mod type_to_leaf;
@@ -50,6 +52,7 @@ pub mod type_to_leaf;
 /// Does not implement any encodings, just declare the traits encoders and decoders will implement.
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
+    use byteorder::WriteBytesExt;
 
     pub struct EncodedLeafTree<TDecoder, Value>
     where
@@ -78,6 +81,37 @@ pub mod encoding {
         type Value = Value;
         fn visit<V: Visitor<Value = Value>>(&self, v: &mut V) {
             self.decoder.visit_root(&self.data, v);
+        }
+    }
+
+    pub struct BasicEncoding;
+
+    const LIST_MARKER: u8 = 0;
+    const LIST_END: u8 = 2;
+    const VALUE_MARKER: u8 = 1;
+
+    impl Encoder for BasicEncoding {
+        type Value = u8;
+        fn serialize<TView: View<Value = Self::Value>>(&self, v: &TView) -> Vec<u8> {
+            struct Output {
+                vec: Vec<u8>,
+            }
+
+            impl Visitor for Output {
+                type Value = u8;
+                fn visit_list<T: View<Value = Self::Value>>(&mut self, t: &T) {
+                    self.vec.write_u8(LIST_MARKER).unwrap();
+                    t.visit(self);
+                    self.vec.write_u8(LIST_END).unwrap();
+                }
+
+                fn visit_value(&mut self, t: Self::Value) {
+                    self.vec.write_u8(VALUE_MARKER).unwrap();
+                    self.vec.write_u8(t).unwrap();
+                }
+            }
+
+            return v.apply(Output { vec: vec![] }).vec;
         }
     }
 }
