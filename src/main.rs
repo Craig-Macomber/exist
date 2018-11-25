@@ -76,7 +76,6 @@ pub mod type_to_leaf;
 /// Does not implement any encodings, just declare the traits encoders and decoders will implement.
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
-    use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
     pub struct EncodedLeafTree<TDecoder, Value>
     where

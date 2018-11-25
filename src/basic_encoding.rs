@@ -2,7 +2,7 @@
 
 use super::data_models::leaf_tree::{View, Visitor};
 use super::encoding::{Decoder, Encoder};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::WriteBytesExt;
 
 pub struct BasicEncoding;
 
