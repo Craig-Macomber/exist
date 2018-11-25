@@ -14,15 +14,16 @@ use self::prefix_encoding::PrefixEncoding;
 use self::type_to_leaf::TypeViewer;
 
 fn main() {
-    let colors = vec![
-        test_data::Color {
-            r: 123,
-            g: 200,
-            b: 153,
+    let mut colors = vec![];
+    for i in 0..200 {
+        colors.push(test_data::Color {
+            r: (i % 256) as u8,
+            g: (i / 256 % 256) as u8,
+            b: (i / 256 / 256 % 256) as u8,
             a: 255,
-        };
-        1000
-    ];
+        });
+    }
+
     let data = test_data::TestData { colors };
 
     let bin_code_size = bincode::serialize(&data).unwrap().len() as f64;
