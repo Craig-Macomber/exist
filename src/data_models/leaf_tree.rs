@@ -20,7 +20,7 @@ pub mod concrete {
     use super::*;
 
     // TODO: remove need for Clone?
-    #[derive(Debug, PartialEq, Eq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone, Hash)]
     pub enum Concrete<V> {
         List(Vec<Concrete<V>>),
         Value(V),

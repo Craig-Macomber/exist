@@ -15,7 +15,7 @@ use self::type_to_leaf::TypeViewer;
 
 fn main() {
     let mut colors = vec![];
-    for i in 0..200 {
+    for i in 0..400 {
         colors.push(test_data::Color {
             r: (i % 256) as u8,
             g: (i / 256 % 256) as u8,

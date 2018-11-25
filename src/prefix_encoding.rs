@@ -22,6 +22,7 @@ use super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
 use super::data_models::leaf_tree::{View, Visitor};
 use super::encoding::{Decoder, Encoder};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::collections::HashMap;
 use std::io::Cursor;
 
 impl Encoder for PrefixEncoding {
@@ -41,29 +42,29 @@ const TEMPLATE_MARKER: u8 = 2;
 struct State {
     // Pushed in post order traversal order
     templates: Vec<Concrete<u8>>,
+    template_map: HashMap<Concrete<u8>, u32>,
 }
 
 impl State {
     fn new() -> State {
-        State { templates: vec![] }
+        State {
+            templates: vec![],
+            template_map: HashMap::new(),
+        }
     }
     fn record(&mut self, c: &Concrete<u8>) {
-        for i in 0..self.templates.len() {
-            if &self.templates[i] == c {
-                return;
-            }
+        let mut inserted = false;
+        let len = self.templates.len() as u32;
+        self.template_map.entry(c.clone()).or_insert_with(|| {
+            inserted = true;
+            len
+        });
+        if inserted {
+            self.templates.push(c.clone());
         }
-        self.templates.push(c.clone());
     }
-    fn lookup(&mut self, c: &Concrete<u8>) -> Option<u32> {
-        for i in 0..self.templates.len() {
-            if &self.templates[i] == c {
-                return Some(i as u32);
-            }
-        }
-
-        //self.templates.push(c.clone());
-        return None;
+    fn lookup(&mut self, c: &Concrete<u8>) -> Option<&u32> {
+        self.template_map.get(c)
     }
 }
 
@@ -90,7 +91,7 @@ fn prefix_encode_compressed(state: &mut State, c: &Concrete<u8>, out: &mut Vec<u
             match id {
                 Some(index) => {
                     out.push(TEMPLATE_MARKER);
-                    out.write_u32::<LittleEndian>(index).unwrap();
+                    out.write_u32::<LittleEndian>(*index).unwrap();
                 }
                 None => {
                     out.push(LIST_MARKER);
