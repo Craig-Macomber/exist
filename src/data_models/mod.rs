@@ -40,7 +40,9 @@ pub mod leaf_tree {
 
     pub mod concrete {
         use super::*;
-        #[derive(Debug, PartialEq)]
+
+        // TODO: remove need for Clone?
+        #[derive(Debug, PartialEq, Eq, Clone)]
         pub enum Concrete<V> {
             List(Vec<Concrete<V>>),
             Value(V),

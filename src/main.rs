@@ -10,6 +10,7 @@ extern crate serde_json;
 mod data_models;
 
 use self::encoding::*;
+use self::prefix_encoding::PrefixEncoding;
 use self::type_to_leaf::TypeViewer;
 
 fn main() {
@@ -38,7 +39,7 @@ fn main() {
     data_models::typed_value_tree::concrete::view_to_concrete(&data);
     data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data));
 
-    let encoded = encoding::BasicEncoding.serialize(&TypeViewer(&data));
+    let encoded = PrefixEncoding.serialize(&TypeViewer(&data));
     //println!("{:?}", encoded);
     println!("exist = {}", encoded.len() as f64 / bin_code_size);
 
@@ -54,13 +55,13 @@ fn main() {
     // );
 
     let decoded_view = EncodedLeafTree {
-        decoder: encoding::BasicEncoding,
+        decoder: PrefixEncoding,
         data: encoded,
     };
 
     data_models::leaf_tree::concrete::view_to_concrete(&decoded_view);
 
-    let encoded2 = encoding::BasicEncoding.serialize(&decoded_view);
+    let encoded2 = PrefixEncoding.serialize(&decoded_view);
     println!("reencoded = {}", encoded2.len() as f64 / bin_code_size);
     //println!("{:?}", encoded2);
 }
@@ -74,7 +75,7 @@ pub mod type_to_leaf;
 /// Does not implement any encodings, just declare the traits encoders and decoders will implement.
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
-    use byteorder::{ReadBytesExt, WriteBytesExt};
+    use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
     pub struct EncodedLeafTree<TDecoder, Value>
     where
@@ -106,109 +107,36 @@ pub mod encoding {
         }
     }
 
-    pub struct BasicEncoding;
-
-    const LIST_MARKER: u8 = 0;
-    const LIST_END: u8 = 2;
-    const VALUE_MARKER: u8 = 1;
-
-    impl Encoder for BasicEncoding {
-        type Value = u8;
-        fn serialize<TView: View<Value = Self::Value>>(&self, v: &TView) -> Vec<u8> {
-            struct Output {
-                vec: Vec<u8>,
-            }
-
-            impl Visitor for Output {
-                type Value = u8;
-                fn visit_list<T: View<Value = Self::Value>>(&mut self, t: &T) {
-                    self.vec.write_u8(LIST_MARKER).unwrap();
-                    t.visit(self);
-                    self.vec.write_u8(LIST_END).unwrap();
-                }
-
-                fn visit_value(&mut self, t: Self::Value) {
-                    self.vec.write_u8(VALUE_MARKER).unwrap();
-                    self.vec.write_u8(t).unwrap();
-                }
-            }
-
-            return v.apply(Output { vec: vec![] }).vec;
-        }
-    }
-
-    impl Decoder for BasicEncoding {
-        type Value = u8;
-        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &[u8], v: &mut V) {
-            struct Tree<'a> {
-                data: &'a [u8],
-            }
-
-            impl<'a> View for Tree<'a> {
-                type Value = u8;
-                fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-                    if self.data.len() == 0 {
-                        return;
-                    }
-                    let marker = self.data[0];
-                    if marker == VALUE_MARKER {
-                        v.visit_value(self.data[1]);
-                    } else {
-                        assert!(marker == LIST_MARKER);
-                        let mut i = 0;
-                        let mut level = 0;
-                        loop {
-                            if self.data.len() == i || self.data[i] == LIST_END {
-                                level = level - 1;
-                                if level == -1 {
-                                    return;
-                                }
-                            } else if self.data[i] == LIST_MARKER {
-                                if level == 0 {
-                                    let sub_tree = Tree {
-                                        data: &self.data[i + 1..],
-                                    };
-                                    v.visit_list(&sub_tree);
-                                }
-                                level = level + 1;
-                            } else {
-                                assert_eq!(
-                                    self.data[i], VALUE_MARKER,
-                                    "i = {}, level = {}",
-                                    i, level
-                                );
-                                if level == 0 {
-                                    panic!();
-                                }
-                                i = i + 1;
-                            }
-                            i = i + 1;
-                        }
-                    }
-                }
-            }
-
-            Tree { data: data }.visit(v);
-        }
-    }
-
     #[cfg(test)]
     mod tests {
+        use super::super::basic_encoding::BasicEncoding;
         use super::super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
+        use super::super::prefix_encoding::PrefixEncoding;
         use super::*;
 
-        fn check(c: Concrete<u8>, v: Vec<u8>) {
-            let input_copy = view_to_concrete(&c);
-            assert_eq!(input_copy, c, "copy");
+        fn encode_round_trip<T: Encoder<Value = u8> + Decoder<Value = u8>>(c: &Concrete<u8>, e: T) {
+            let input_copy = view_to_concrete(c);
+            assert_eq!(&input_copy, c, "copy");
 
-            let encoded = BasicEncoding.serialize(&c);
-            assert_eq!(encoded, v, "encode");
+            let encoded = e.serialize(c);
             let decoded_view = EncodedLeafTree {
-                decoder: BasicEncoding,
+                decoder: e,
                 data: encoded,
             };
             let decoded_copy = view_to_concrete(&decoded_view);
-            assert_eq!(decoded_copy, c, "decode");
+            assert_eq!(&decoded_copy, c, "decode");
+        }
+
+        fn check(c: Concrete<u8>, v: Vec<u8>) {
+            encode_round_trip(&c, BasicEncoding);
+            let encoded = BasicEncoding.serialize(&c);
+            assert_eq!(encoded, v, "encode");
+            encode_round_trip(&c, PrefixEncoding);
+        }
+
+        fn check2(c: Concrete<u8>) {
+            encode_round_trip(&c, BasicEncoding);
+            encode_round_trip(&c, PrefixEncoding);
         }
 
         #[test]
@@ -233,8 +161,31 @@ pub mod encoding {
                 vec![0, 1, 12, 2, 0, 1, 13, 2],
             );
         }
+
+        #[test]
+        fn encode_list_dup() {
+            check2(Concrete::List(vec![
+                Concrete::List(vec![Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(12)]),
+            ]));
+        }
+
+        #[test]
+        fn encode_list_dup2() {
+            check2(Concrete::List(vec![
+                Concrete::List(vec![Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(12), Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(12)]),
+                Concrete::List(vec![Concrete::Value(13)]),
+            ]));
+        }
     }
 }
+
+pub mod basic_encoding;
+pub mod prefix_encoding;
 
 #[macro_use]
 mod into_typed_value_tree {
