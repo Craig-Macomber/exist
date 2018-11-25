@@ -10,6 +10,7 @@ extern crate serde_json;
 mod data_models;
 
 use self::encoding::*;
+use self::type_to_leaf::TypeViewer;
 
 fn main() {
     let colors = vec![
@@ -35,12 +36,33 @@ fn main() {
     );
 
     data_models::typed_value_tree::concrete::view_to_concrete(&data);
-    data_models::leaf_tree::concrete::view_to_concrete(&data);
+    data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data));
 
-    println!(
-        "exist = {}",
-        encoding::BasicEncoding.serialize(&data).len() as f64 / bin_code_size
-    );
+    let encoded = encoding::BasicEncoding.serialize(&TypeViewer(&data));
+    //println!("{:?}", encoded);
+    println!("exist = {}", encoded.len() as f64 / bin_code_size);
+
+    // let encoded_copy = encoding::BasicEncoding.serialize(
+    //     &data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data)),
+    // );
+
+    // println!("{:?}", encoded_copy);
+
+    // println!(
+    //     "encoded_copy = {}",
+    //     encoded_copy.len() as f64 / bin_code_size
+    // );
+
+    let decoded_view = EncodedLeafTree {
+        decoder: encoding::BasicEncoding,
+        data: encoded,
+    };
+
+    data_models::leaf_tree::concrete::view_to_concrete(&decoded_view);
+
+    let encoded2 = encoding::BasicEncoding.serialize(&decoded_view);
+    println!("reencoded = {}", encoded2.len() as f64 / bin_code_size);
+    //println!("{:?}", encoded2);
 }
 
 pub mod type_to_leaf;
@@ -52,20 +74,20 @@ pub mod type_to_leaf;
 /// Does not implement any encodings, just declare the traits encoders and decoders will implement.
 pub mod encoding {
     use super::data_models::leaf_tree::{View, Visitor};
-    use byteorder::WriteBytesExt;
+    use byteorder::{ReadBytesExt, WriteBytesExt};
 
     pub struct EncodedLeafTree<TDecoder, Value>
     where
         TDecoder: Decoder<Value = Value>,
     {
-        decoder: TDecoder,
-        data: Vec<u8>,
+        pub decoder: TDecoder,
+        pub data: Vec<u8>,
     }
 
     // Implement this to define a way to deserialize leaf trees.
     pub trait Decoder {
         type Value;
-        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &Vec<u8>, v: &mut V);
+        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &[u8], v: &mut V);
     }
 
     // Implement this to define a way to serialize leaf trees.
@@ -112,6 +134,104 @@ pub mod encoding {
             }
 
             return v.apply(Output { vec: vec![] }).vec;
+        }
+    }
+
+    impl Decoder for BasicEncoding {
+        type Value = u8;
+        fn visit_root<V: Visitor<Value = Self::Value>>(&self, data: &[u8], v: &mut V) {
+            struct Tree<'a> {
+                data: &'a [u8],
+            }
+
+            impl<'a> View for Tree<'a> {
+                type Value = u8;
+                fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+                    if self.data.len() == 0 {
+                        return;
+                    }
+                    let marker = self.data[0];
+                    if marker == VALUE_MARKER {
+                        v.visit_value(self.data[1]);
+                    } else {
+                        assert!(marker == LIST_MARKER);
+                        let mut i = 0;
+                        let mut level = 0;
+                        loop {
+                            if self.data.len() == i || self.data[i] == LIST_END {
+                                level = level - 1;
+                                if level == -1 {
+                                    return;
+                                }
+                            } else if self.data[i] == LIST_MARKER {
+                                if level == 0 {
+                                    let sub_tree = Tree {
+                                        data: &self.data[i + 1..],
+                                    };
+                                    v.visit_list(&sub_tree);
+                                }
+                                level = level + 1;
+                            } else {
+                                assert_eq!(
+                                    self.data[i], VALUE_MARKER,
+                                    "i = {}, level = {}",
+                                    i, level
+                                );
+                                if level == 0 {
+                                    panic!();
+                                }
+                                i = i + 1;
+                            }
+                            i = i + 1;
+                        }
+                    }
+                }
+            }
+
+            Tree { data: data }.visit(v);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
+        use super::*;
+
+        fn check(c: Concrete<u8>, v: Vec<u8>) {
+            let input_copy = view_to_concrete(&c);
+            assert_eq!(input_copy, c, "copy");
+
+            let encoded = BasicEncoding.serialize(&c);
+            assert_eq!(encoded, v, "encode");
+            let decoded_view = EncodedLeafTree {
+                decoder: BasicEncoding,
+                data: encoded,
+            };
+            let decoded_copy = view_to_concrete(&decoded_view);
+            assert_eq!(decoded_copy, c, "decode");
+        }
+
+        #[test]
+        fn encode_empty() {
+            check(Concrete::List(vec![]), Vec::<u8>::new());
+        }
+
+        #[test]
+        fn encode_value() {
+            check(Concrete::Value(12), vec![1, 12]);
+        }
+
+        #[test]
+        fn encode_list() {
+            check(Concrete::List(vec![Concrete::Value(12)]), vec![0, 1, 12, 2]);
+        }
+
+        #[test]
+        fn encode_list2() {
+            check(
+                Concrete::List(vec![Concrete::Value(12), Concrete::Value(13)]),
+                vec![0, 1, 12, 2, 0, 1, 13, 2],
+            );
         }
     }
 }

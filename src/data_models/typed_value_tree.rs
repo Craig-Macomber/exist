@@ -171,7 +171,7 @@ pub mod concrete {
                 content: StructOrValue::Struct(map),
             };
 
-            let c2 = view_to_concrete(c);
+            let c2 = view_to_concrete(&c);
             //assert_eq!(c, c2);
         }
     }

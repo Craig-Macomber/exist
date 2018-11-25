@@ -40,6 +40,7 @@ pub mod leaf_tree {
 
     pub mod concrete {
         use super::*;
+        #[derive(Debug, PartialEq)]
         pub enum Concrete<V> {
             List(Vec<Concrete<V>>),
             Value(V),
@@ -70,17 +71,31 @@ pub mod leaf_tree {
             T: View<Value = V>,
             V: Clone,
         {
-            impl<V> Visitor for Vec<Concrete<V>> {
+            struct Out<V>(Concrete<V>);
+            impl<V> Visitor for Out<V>
+            where
+                V: Clone,
+            {
                 type Value = V;
                 fn visit_list<T: View<Value = V>>(&mut self, t: &T) {
-                    self.push(Concrete::List(t.apply(vec![])));
+                    match &mut self.0 {
+                        Concrete::List(vec) => vec.push(view_to_concrete(t)),
+                        _ => panic!(),
+                    };
                 }
                 fn visit_value(&mut self, v: V) {
-                    self.push(Concrete::Value(v));
+                    match &self.0 {
+                        Concrete::List(vec) => {
+                            assert_eq!(vec.len(), 0);
+                        }
+                        _ => panic!(),
+                    };
+
+                    self.0 = Concrete::Value(v);
                 }
             }
 
-            return t.apply(vec![]).into_iter().nth(0).unwrap();
+            return t.apply(Out(Concrete::List(vec![]))).0;
         }
     }
 }

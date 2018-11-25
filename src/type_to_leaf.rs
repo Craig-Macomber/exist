@@ -41,6 +41,8 @@ struct ByteLister {
     v: Vec<u8>,
 }
 
+struct ByteValue(u8);
+
 fn make_byte_lister(n: u128) -> ByteLister {
     let mut wtr = vec![];
     wtr.write_u128::<byteorder::LittleEndian>(n).unwrap();
@@ -50,25 +52,33 @@ fn make_byte_lister(n: u128) -> ByteLister {
 impl View for ByteLister {
     type Value = u8;
     fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-        for u in self.v.iter() {
-            v.visit_value(*u);
+        for u in &self.v {
+            v.visit_list(&ByteValue(*u));
         }
     }
 }
 
-impl<T> View for T
+impl View for ByteValue {
+    type Value = u8;
+    fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
+        v.visit_value(self.0);
+    }
+}
+
+pub struct TypeViewer<T>(pub T);
+impl<T> View for TypeViewer<&T>
 where
     T: TypeView<N = u128>,
 {
     type Value = u8;
     fn visit<V: Visitor<Value = u8>>(&self, v: &mut V) {
-        let type_name = self.apply(TypeGetter(0u128));
+        let type_name = self.0.apply(TypeGetter(0u128));
 
         // Type: list of bytes containing type's id
         v.visit_list(&make_byte_lister(type_name.0));
 
         // Content: List of map entries OR List of bytes if terminal type
-        v.visit_list(&ContentLister(self));
+        v.visit_list(&ContentLister(self.0));
 
         struct TypeGetter(u128);
         impl TypeVisitor for TypeGetter {
@@ -108,7 +118,9 @@ where
             fn visit_value(&mut self, _type_name: &Self::N, t: &Vec<u8>) {
                 // Content:
                 // List of bytes for terminal type
-                self.0.visit_list(&ByteLister { v: t.clone() });
+                for u in t {
+                    self.0.visit_list(&ByteValue(*u));
+                }
             }
         }
     }
@@ -159,7 +171,7 @@ where
 
             fn visit<T: TypeView<N = Self::N>>(&mut self, child: &T) {
                 // TypedValue
-                self.0.visit_list(child);
+                self.0.visit_list(&TypeViewer(child));
             }
         }
     }
