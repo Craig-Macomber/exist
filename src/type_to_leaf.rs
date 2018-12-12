@@ -87,7 +87,7 @@ where
             fn visit_map<T: MapView<N = Self::N>>(&mut self, type_name: &Self::N, _t: &T) {
                 self.0 = *type_name;
             }
-            fn visit_value(&mut self, type_name: &Self::N, _t: &Vec<u8>) {
+            fn visit_value(&mut self, type_name: &Self::N, _t: &[u8]) {
                 self.0 = *type_name;
             }
         }
@@ -115,7 +115,7 @@ where
                 self.0.visit_list(&MapLister(t));
             }
 
-            fn visit_value(&mut self, _type_name: &Self::N, t: &Vec<u8>) {
+            fn visit_value(&mut self, _type_name: &Self::N, t: &[u8]) {
                 // Content:
                 // List of bytes for terminal type
                 for u in t {

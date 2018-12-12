@@ -82,6 +82,6 @@ impl Decoder for BasicEncoding {
             }
         }
 
-        Tree { data: data }.visit(v);
+        Tree { data }.visit(v);
     }
 }

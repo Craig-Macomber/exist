@@ -16,7 +16,7 @@ pub trait TypeVisitor {
 
     /// Called if the View was a Value / Leaf
     // TODO: use ExactSizeIterator?
-    fn visit_value(&mut self, type_name: &Self::N, t: &Vec<u8>);
+    fn visit_value(&mut self, type_name: &Self::N, t: &[u8]);
 }
 
 pub trait MapVisitor {
@@ -121,10 +121,10 @@ pub mod concrete {
                     content: StructOrValue::Struct(t.apply(copier(HashMap::new())).t),
                 });
             }
-            fn visit_value(&mut self, type_name: &Self::N, t: &Vec<u8>) {
+            fn visit_value(&mut self, type_name: &Self::N, t: &[u8]) {
                 self.t = Some(Concrete {
                     type_name: type_name.clone(),
-                    content: StructOrValue::Value(t.clone()),
+                    content: StructOrValue::Value(t.to_vec()),
                 })
             }
         }
