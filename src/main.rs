@@ -1,13 +1,7 @@
-#[macro_use]
-extern crate serde_derive;
-extern crate bincode;
-extern crate byteorder;
-extern crate serde;
-extern crate serde_cbor;
-extern crate serde_json;
-
-#[macro_use]
-mod data_models;
+pub mod basic_encoding;
+pub mod data_models;
+pub mod prefix_encoding;
+pub mod type_to_leaf;
 
 use self::encoding::*;
 use self::prefix_encoding::PrefixCompressedEncoding;
@@ -41,19 +35,7 @@ fn main() {
     data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data));
 
     let encoded = PrefixCompressedEncoding.serialize(&TypeViewer(&data));
-    //println!("{:?}", encoded);
     println!("exist = {}", encoded.len() as f64 / bin_code_size);
-
-    // let encoded_copy = encoding::BasicEncoding.serialize(
-    //     &data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data)),
-    // );
-
-    // println!("{:?}", encoded_copy);
-
-    // println!(
-    //     "encoded_copy = {}",
-    //     encoded_copy.len() as f64 / bin_code_size
-    // );
 
     let decoded_view = EncodedLeafTree {
         decoder: PrefixCompressedEncoding,
@@ -61,13 +43,9 @@ fn main() {
     };
 
     data_models::leaf_tree::concrete::view_to_concrete(&decoded_view);
-
     let encoded2 = PrefixCompressedEncoding.serialize(&decoded_view);
-    println!("reencoded = {}", encoded2.len() as f64 / bin_code_size);
-    //println!("{:?}", encoded2);
+    assert_eq!(&decoded_view.data, &encoded2);
 }
-
-pub mod type_to_leaf;
 
 // Design TODO:
 // Consider ways to lifetime extend View_s to enable incremental/lazy traversal and/or references to locations in trees
@@ -185,9 +163,6 @@ pub mod encoding {
     }
 }
 
-pub mod basic_encoding;
-pub mod prefix_encoding;
-
 #[macro_use]
 mod into_typed_value_tree {
     use super::data_models::typed_value_tree::{ListView, ListVisitor, MapVisitor, TypeView};
@@ -302,6 +277,7 @@ mod test_data {
     use super::into_typed_value_tree::{
         visit_list_field, visit_single_field, Named, Struct, Terminal,
     };
+    use serde_derive::{Deserialize, Serialize};
 
     #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
     pub struct TestData {

@@ -211,7 +211,7 @@ fn get_shape<TView: View<Value = u8>>(view: TView) -> Shape {
             let mut out_nested = Out(self.0, self.0.len() - 1);
             t.visit(&mut out_nested);
         }
-        fn visit_value(&mut self, v: u8) {
+        fn visit_value(&mut self, _: u8) {
             assert_eq!(self.0[self.1], 0);
             self.0[self.1] = u32::max_value();
         }
