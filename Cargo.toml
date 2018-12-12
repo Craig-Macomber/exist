@@ -1,5 +1,5 @@
 [package]
-name = "reflective"
+name = "exist"
 version = "0.1.0"
 authors = ["Craig Macomber <CraigM@CraigM.info>"]
 edition = "2018"
