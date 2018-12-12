@@ -75,9 +75,9 @@ const INLINE_LIST_MIN: u8 = 128;
 
 // Appends a new template
 const BYTE_PATTERN_TEMPLATE_MARKER: u8 = 2;
-// 32 stride (length in stream)
+// u32 size (length in stream)
 // u8:
-//      0 = list,
+//      0 | 128-255 = list (length + children)
 //      1 = constant value, next byte
 //      2 = value from stream, followed by offset next 4 bytes
 //      3 = invalid
@@ -110,6 +110,32 @@ const TEMPLATE_USE_SEQUENCE_MARKER: u8 = 5;
 // u32: template index (TODO: varalible length encoding?)
 // u32: repeate count (TODO: varalible length encoding?)
 // data stream (if BYTE_PATTERN_TEMPLATE: length = repeate count * template' stride)
+
+struct BytePatternTemplate<'a> {
+    size: u32,
+    content: BytePatternChild<'a>,
+}
+
+enum BytePatternChild<'a> {
+    List(Vec<BytePatternChild<'a>>),
+    ConstantValue(u8),
+    ValueFromStreamAtOffset(u32),
+    TemplateUse(OffsetTemplateUse<&'a BytePatternTemplate<'a>>),
+}
+
+struct OffsetTemplateUse<T> {
+    template: T,
+    offset: u32,
+}
+
+enum TreeTemplate<'a> {
+    List(Vec<TreeTemplate<'a>>),
+    ConstantValue(u8),
+    ValueFromStream,
+    TreeFromStream,
+    TreeTemplateUse(&'a TreeTemplate<'a>),
+    BytePatternTemplateUse(&'a BytePatternTemplate<'a>),
+}
 
 enum Marker {
     List(usize),
