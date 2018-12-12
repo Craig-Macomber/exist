@@ -39,10 +39,30 @@ const LIST_MARKER: u8 = 0;
 const VALUE_MARKER: u8 = 1;
 const TEMPLATE_MARKER: u8 = 2;
 
+struct Shape {
+    counts: Vec<u32>, // the number of children in each node, in pre-order traversal order, where value nodes are encoded as u32.max_value
+}
+
+struct ShapeState {
+    id: u32,
+    // Pushed in post order traversal order
+    // TODO: store refs in here? Remove this?
+    templates: Vec<Concrete<u8>>,
+    // TODO: store refs in here?
+    template_map: HashMap<Concrete<u8>, u32>,
+
+    // shape + Vec<u8> = Concrete<u8>
+    // when encoding check these, see if there is an existing on to reference that matches exactly (use map above)
+    // can also check to find the most similar one, and make partial replace template if profitable (or maybe only do that with schema hints)
+    trees: Vec<Vec<u8>>,
+}
+
 struct State {
     // Pushed in post order traversal order
     templates: Vec<Concrete<u8>>,
     template_map: HashMap<Concrete<u8>, u32>,
+
+    //all: HashMap<Shape, ShapeState>,
 }
 
 impl State {
