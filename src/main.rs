@@ -10,7 +10,7 @@ extern crate serde_json;
 mod data_models;
 
 use self::encoding::*;
-use self::prefix_encoding::PrefixEncoding;
+use self::prefix_encoding::PrefixCompressedEncoding;
 use self::type_to_leaf::TypeViewer;
 
 fn main() {
@@ -40,7 +40,7 @@ fn main() {
     data_models::typed_value_tree::concrete::view_to_concrete(&data);
     data_models::leaf_tree::concrete::view_to_concrete(&TypeViewer(&data));
 
-    let encoded = PrefixEncoding.serialize(&TypeViewer(&data));
+    let encoded = PrefixCompressedEncoding.serialize(&TypeViewer(&data));
     //println!("{:?}", encoded);
     println!("exist = {}", encoded.len() as f64 / bin_code_size);
 
@@ -56,13 +56,13 @@ fn main() {
     // );
 
     let decoded_view = EncodedLeafTree {
-        decoder: PrefixEncoding,
+        decoder: PrefixCompressedEncoding,
         data: encoded,
     };
 
     data_models::leaf_tree::concrete::view_to_concrete(&decoded_view);
 
-    let encoded2 = PrefixEncoding.serialize(&decoded_view);
+    let encoded2 = PrefixCompressedEncoding.serialize(&decoded_view);
     println!("reencoded = {}", encoded2.len() as f64 / bin_code_size);
     //println!("{:?}", encoded2);
 }
@@ -111,7 +111,7 @@ pub mod encoding {
     mod tests {
         use super::super::basic_encoding::BasicEncoding;
         use super::super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
-        use super::super::prefix_encoding::PrefixEncoding;
+        use super::super::prefix_encoding::{PrefixCompressedEncoding, PrefixEncoding};
         use super::*;
 
         fn encode_round_trip<T: Encoder<Value = u8> + Decoder<Value = u8>>(c: &Concrete<u8>, e: T) {
@@ -131,12 +131,13 @@ pub mod encoding {
             encode_round_trip(&c, BasicEncoding);
             let encoded = BasicEncoding.serialize(&c);
             assert_eq!(encoded, v, "encode");
-            encode_round_trip(&c, PrefixEncoding);
+            check2(c);
         }
 
         fn check2(c: Concrete<u8>) {
             encode_round_trip(&c, BasicEncoding);
             encode_round_trip(&c, PrefixEncoding);
+            encode_round_trip(&c, PrefixCompressedEncoding);
         }
 
         #[test]
