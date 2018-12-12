@@ -36,6 +36,7 @@ pub mod concrete {
     use std::collections::HashMap;
     use std::hash::Hash;
 
+    #[derive(Debug, PartialEq)]
     pub struct Concrete<N>
     where
         N: Eq + Hash,
@@ -45,6 +46,7 @@ pub mod concrete {
     }
 
     /// Content helper for Concrete.
+    #[derive(Debug, PartialEq)]
     pub enum StructOrValue<N>
     where
         N: Eq + Hash,
@@ -172,7 +174,7 @@ pub mod concrete {
             };
 
             let c2 = view_to_concrete(&c);
-            //assert_eq!(c, c2);
+            assert_eq!(c, c2);
         }
     }
 }
