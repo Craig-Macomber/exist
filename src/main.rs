@@ -2,6 +2,8 @@ pub mod basic_encoding;
 pub mod data_models;
 pub mod prefix_encoding;
 pub mod type_to_leaf;
+#[macro_use]
+mod into_typed_value_tree;
 
 use self::encoding::*;
 use self::prefix_encoding::PrefixCompressedEncoding;
@@ -84,191 +86,82 @@ pub mod encoding {
             self.decoder.visit_root(&self.data, v);
         }
     }
-
-    #[cfg(test)]
-    mod tests {
-        use super::super::basic_encoding::BasicEncoding;
-        use super::super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
-        use super::super::prefix_encoding::{PrefixCompressedEncoding, PrefixEncoding};
-        use super::*;
-
-        fn encode_round_trip<T: Encoder<Value = u8> + Decoder<Value = u8>>(c: &Concrete<u8>, e: T) {
-            let input_copy = view_to_concrete(c);
-            assert_eq!(&input_copy, c, "copy");
-
-            let encoded = e.serialize(c);
-            let decoded_view = EncodedLeafTree {
-                decoder: e,
-                data: encoded,
-            };
-            let decoded_copy = view_to_concrete(&decoded_view);
-            assert_eq!(&decoded_copy, c, "decode");
-        }
-
-        fn check(c: Concrete<u8>, v: Vec<u8>) {
-            encode_round_trip(&c, BasicEncoding);
-            let encoded = BasicEncoding.serialize(&c);
-            assert_eq!(encoded, v, "encode");
-            check2(c);
-        }
-
-        fn check2(c: Concrete<u8>) {
-            encode_round_trip(&c, BasicEncoding);
-            encode_round_trip(&c, PrefixEncoding);
-            encode_round_trip(&c, PrefixCompressedEncoding);
-        }
-
-        #[test]
-        fn encode_empty() {
-            check(Concrete::List(vec![]), Vec::<u8>::new());
-        }
-
-        #[test]
-        fn encode_value() {
-            check(Concrete::Value(12), vec![1, 12]);
-        }
-
-        #[test]
-        fn encode_list() {
-            check(Concrete::List(vec![Concrete::Value(12)]), vec![0, 1, 12, 2]);
-        }
-
-        #[test]
-        fn encode_list2() {
-            check(
-                Concrete::List(vec![Concrete::Value(12), Concrete::Value(13)]),
-                vec![0, 1, 12, 2, 0, 1, 13, 2],
-            );
-        }
-
-        #[test]
-        fn encode_list_dup() {
-            check2(Concrete::List(vec![
-                Concrete::List(vec![Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(12)]),
-            ]));
-        }
-
-        #[test]
-        fn encode_list_dup2() {
-            check2(Concrete::List(vec![
-                Concrete::List(vec![Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(12), Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(12)]),
-                Concrete::List(vec![Concrete::Value(13)]),
-            ]));
-        }
-    }
 }
 
-#[macro_use]
-mod into_typed_value_tree {
-    use super::data_models::typed_value_tree::{ListView, ListVisitor, MapVisitor, TypeView};
+#[cfg(test)]
+mod tests {
+    use super::basic_encoding::BasicEncoding;
+    use super::data_models::leaf_tree::concrete::{view_to_concrete, Concrete};
+    use super::encoding::*;
+    use super::prefix_encoding::{PrefixCompressedEncoding, PrefixEncoding};
 
-    /// Implement this for Terminal / Primitive types to be treated as byte sequences
-    pub trait Terminal {
-        fn get_id() -> u128;
-        /// Must be platform independent
-        fn bytes(&self) -> Vec<u8>;
-    }
+    fn encode_round_trip<T: Encoder<Value = u8> + Decoder<Value = u8>>(c: &Concrete<u8>, e: T) {
+        let input_copy = view_to_concrete(c);
+        assert_eq!(&input_copy, c, "copy");
 
-    /// Implement this for Struct / Aggregate types
-    pub trait Struct {
-        fn get_id() -> u128;
-        fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V);
-    }
-
-    #[macro_export]
-    macro_rules! TypeViewForTerminal {
-        ( $Type:ty ) => {
-            impl TypeView for $Type {
-                type N = u128;
-
-                fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
-                    v.visit_value(&<Self as Terminal>::get_id(), &self.bytes());
-                }
-            }
-
-            impl Named for $Type {
-                fn get_id() -> u128 {
-                    <Self as Terminal>::get_id()
-                }
-            }
+        let encoded = e.serialize(c);
+        let decoded_view = EncodedLeafTree {
+            decoder: e,
+            data: encoded,
         };
+        let decoded_copy = view_to_concrete(&decoded_view);
+        assert_eq!(&decoded_copy, c, "decode");
     }
 
-    #[macro_export]
-    macro_rules! TypeViewForStruct {
-        ( $Type:ty ) => {
-            impl TypeView for $Type {
-                type N = u128;
-
-                fn visit<V: TypeVisitor<N = Self::N>>(&self, v: &mut V) {
-                    v.visit_map(&<Self as Struct>::get_id(), self);
-                }
-            }
-
-            impl MapView for $Type {
-                type N = u128;
-
-                fn visit<V: MapVisitor<N = u128>>(&self, v: &mut V) {
-                    <Self as Struct>::visit(self, v);
-                }
-            }
-
-            impl Named for $Type {
-                fn get_id() -> u128 {
-                    <Self as Struct>::get_id()
-                }
-            }
-        };
+    fn check(c: Concrete<u8>, v: Vec<u8>) {
+        encode_round_trip(&c, BasicEncoding);
+        let encoded = BasicEncoding.serialize(&c);
+        assert_eq!(encoded, v, "encode");
+        check2(c);
     }
 
-    pub trait Named {
-        fn get_id() -> u128;
+    fn check2(c: Concrete<u8>) {
+        encode_round_trip(&c, BasicEncoding);
+        encode_round_trip(&c, PrefixEncoding);
+        encode_round_trip(&c, PrefixCompressedEncoding);
     }
 
-    pub fn visit_single_field<T, V>(v: &mut V, name: &u128, t: &T)
-    where
-        T: TypeView<N = u128>,
-        V: MapVisitor<N = u128>,
-    {
-        v.visit(name, &ContentListerVisiter(t));
-
-        struct ContentListerVisiter<T>(T);
-        impl<T> ListView for ContentListerVisiter<&T>
-        where
-            T: TypeView<N = u128>,
-        {
-            type N = u128;
-            fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
-                v.visit(self.0);
-            }
-        }
+    #[test]
+    fn encode_empty() {
+        check(Concrete::List(vec![]), Vec::<u8>::new());
     }
 
-    // TODO: make this accept any IntoIterator not just Vec
-    pub fn visit_list_field<T, V>(v: &mut V, name: &u128, t: &Vec<T>)
-    where
-        T: TypeView<N = u128>,
-        V: MapVisitor<N = u128>,
-    {
-        v.visit(name, &ContentListerVisiter(t));
+    #[test]
+    fn encode_value() {
+        check(Concrete::Value(12), vec![1, 12]);
+    }
 
-        struct ContentListerVisiter<'a, T>(&'a Vec<T>);
-        impl<'a, T> ListView for ContentListerVisiter<'a, T>
-        where
-            T: TypeView<N = u128>,
-        {
-            type N = u128;
-            fn visit<V: ListVisitor<N = Self::N>>(&self, v: &mut V) {
-                for child in self.0 {
-                    v.visit(child);
-                }
-            }
-        }
+    #[test]
+    fn encode_list() {
+        check(Concrete::List(vec![Concrete::Value(12)]), vec![0, 1, 12, 2]);
+    }
+
+    #[test]
+    fn encode_list2() {
+        check(
+            Concrete::List(vec![Concrete::Value(12), Concrete::Value(13)]),
+            vec![0, 1, 12, 2, 0, 1, 13, 2],
+        );
+    }
+
+    #[test]
+    fn encode_list_dup() {
+        check2(Concrete::List(vec![
+            Concrete::List(vec![Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(12)]),
+        ]));
+    }
+
+    #[test]
+    fn encode_list_dup2() {
+        check2(Concrete::List(vec![
+            Concrete::List(vec![Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(12), Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(12)]),
+            Concrete::List(vec![Concrete::Value(13)]),
+        ]));
     }
 }
 
