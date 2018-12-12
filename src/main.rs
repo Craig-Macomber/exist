@@ -3,7 +3,8 @@ pub mod data_models;
 pub mod prefix_encoding;
 pub mod type_to_leaf;
 #[macro_use]
-mod into_typed_value_tree;
+pub mod into_typed_value_tree;
+pub mod leaf_tree_template;
 
 use self::encoding::*;
 use self::prefix_encoding::PrefixCompressedEncoding;

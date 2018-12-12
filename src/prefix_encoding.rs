@@ -111,32 +111,6 @@ const TEMPLATE_USE_SEQUENCE_MARKER: u8 = 5;
 // u32: repeate count (TODO: varalible length encoding?)
 // data stream (if BYTE_PATTERN_TEMPLATE: length = repeate count * template' stride)
 
-struct BytePatternTemplate<'a> {
-    size: u32,
-    content: BytePatternChild<'a>,
-}
-
-enum BytePatternChild<'a> {
-    List(Vec<BytePatternChild<'a>>),
-    ConstantValue(u8),
-    ValueFromStreamAtOffset(u32),
-    TemplateUse(OffsetTemplateUse<&'a BytePatternTemplate<'a>>),
-}
-
-struct OffsetTemplateUse<T> {
-    template: T,
-    offset: u32,
-}
-
-enum TreeTemplate<'a> {
-    List(Vec<TreeTemplate<'a>>),
-    ConstantValue(u8),
-    ValueFromStream,
-    TreeFromStream,
-    TreeTemplateUse(&'a TreeTemplate<'a>),
-    BytePatternTemplateUse(&'a BytePatternTemplate<'a>),
-}
-
 enum Marker {
     List(usize),
     Value(u8),
