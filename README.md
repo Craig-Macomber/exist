@@ -3,7 +3,7 @@ Self describing persistence library in Rust.
 
 Have some data, and also some type, and want to existify something as close to that type as possible from the data with proper semantics? If thats what you want, some day this library might help you do this, as well as export said data in the first place.
 
-This library is very unfinished and it not currently usable at all. It will hopefully evolve into a usable proof of concept, and then maybe get productionized.
+This library is very unfinished and it not currently usable at all. It will hopefully evolve into a usable proof of concept, and then maybe get productionized, however my focus is currently on learning rust, and experimenting with various rust features, tools and design patterns.
 
 The goal of exist is to provide an easy way to serialize rust data structures (mainly tree like ones consisting of structs and sequence types) such that they can deserialized and interpreted even if the schema (the rust types you are deserializing into) do no match the ones that were serialized. This requires the data to be self describing, and the deserializer must handle missing data, extra data, and otherwise out of schema data.
 
