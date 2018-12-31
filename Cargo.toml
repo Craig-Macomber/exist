@@ -1,11 +1,11 @@
 [package]
 name = "exist"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Craig Macomber <CraigM@CraigM.info>"]
 edition = "2018"
 
 description = "Self describing persistence library"
-documentation = "https://github.com/Craig-Macomber/exist"
+documentation = "https://docs.rs/crate/exist"
 homepage = "https://github.com/Craig-Macomber/exist"
 repository = "https://github.com/Craig-Macomber/exist"
 readme = "README.md"
