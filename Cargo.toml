@@ -1,6 +1,6 @@
 [package]
 name = "exist"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Craig Macomber <CraigM@CraigM.info>"]
 edition = "2018"
 
