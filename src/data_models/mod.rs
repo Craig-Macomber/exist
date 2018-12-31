@@ -1,4 +1,5 @@
 //! Data Models used in this library.
+//! 
 //! Since there is no single Trait that an object will implement to expose itself as one of these data models,
 //! the names for the models are used by nested modules.
 //! Each nested module contains a reference concrete implementations with minimal complexity
@@ -12,6 +13,8 @@ macro_rules! Visitable {
         pub trait $Name {
             $(type $Items;)*
             fn visit<V: $Visitor<$($Items = Self::$Items),*>>(&self, v: &mut V);
+
+            /// fluent style wrapper around visit
             fn apply<V: $Visitor<$($Items = Self::$Items),*>>(&self, mut v: V) -> V {
                 self.visit(&mut v);
                 return v;

@@ -1,4 +1,6 @@
 //! Output tree looks like:
+//! 
+//! <pre>
 //! TypedValue (List)
 //!     TypeName (List)
 //!         first byte (Value)
@@ -6,16 +8,20 @@
 //!         16th byte (Value)
 //!     Content (List)
 //!         ...
-//!
+//! </pre>
+//! 
 //! If Content is Value:
+//! <pre>
 //! Content (List)
 //!     first byte (Value)
 //!     ...
 //!     last byte (Value)
-//!
+//! </pre>
+//! 
 //! Content can have 0+ bytes
 //!
 //! If Content is Struct/Map:
+//! <pre>
 //! Content (List)
 //!     Map Marker (List) (needed so we can tell empty map from empty Value)
 //!         first map entry (List)
@@ -28,8 +34,10 @@
 //!         ...
 //!         last map entry (List)
 //!             ...
-//!
+//! </pre>
+//! 
 //! Content can have 0+ map entries
+//! 
 
 use super::data_models::leaf_tree::{View, Visitor};
 use super::data_models::typed_value_tree::{

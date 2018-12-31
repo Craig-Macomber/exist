@@ -1,9 +1,9 @@
 //! TypedTree, but can store value direct in the nodes instead of just children.
 //!
 //! Types were getting too verbose. Shortened to:
-//! N = Name
-//! V = Type parameter that is a Visitor
-//! T = Type parameter that is a Tree / Visitable
+//! - N = Name
+//! - V = Type parameter that is a Visitor
+//! - T = Type parameter that is a Tree / Visitable
 
 Visitable!(TypeView, TypeVisitor, N);
 Visitable!(MapView, MapVisitor, N);

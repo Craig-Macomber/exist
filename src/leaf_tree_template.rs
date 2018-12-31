@@ -1,3 +1,5 @@
+//! Functionality for creating and using (encode and decode) templates for leaf trees. These templates enable deduplicating similar aspects of leaf trees, specifically redundant structural (shape) information and identical values.
+
 pub struct BytePatternTemplate<'a> {
     size: u32,
     content: BytePatternChild<'a>,

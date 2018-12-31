@@ -1,6 +1,9 @@
 //! Each node is encoded as a type indicator (list or value), then the actual data.
+//! 
 //! Lists are prefixed with their count.
+//! 
 //! Values are written directly.
+//! 
 //! Other contend type id's are used for more compact optional optimizations, including:
 //! - Template Tree: generates a tree (template ref + data stream)
 //! - Template Sequence: generates multiple siblings (template ref + data stream)
@@ -8,7 +11,7 @@
 //! A template ref can either define a template inline,
 //! or reference a previous template (for now by index out of all templates).
 //!
-//! All templates can be used for a single tree or sequence (applied multiple times, consuming sequential data)
+//! All templates can be used for a single tree or sequence (applied multiple times, consuming sequential data).
 //!
 //! A template consists of a tree where some of the nodes may be replaced with generators instead of just values or lists.
 //! Generators may reference the data stream and/or move the stream pointer (out of order access is allowed).
