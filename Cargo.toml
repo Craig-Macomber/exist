@@ -4,6 +4,18 @@ version = "0.1.0"
 authors = ["Craig Macomber <CraigM@CraigM.info>"]
 edition = "2018"
 
+description = "Self describing persistence library"
+documentation = "https://github.com/Craig-Macomber/exist"
+homepage = "https://github.com/Craig-Macomber/exist"
+repository = "https://github.com/Craig-Macomber/exist"
+readme = "README.md"
+keywords = ["persistence", "serialization"]
+categories = ["Encoding"]
+license = "MIT"
+
+[badges]
+maintenance = { status = "experimental" }
+
 [dependencies]
 serde = "1.0"
 serde_derive = "1.0"
