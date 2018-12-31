@@ -10,7 +10,7 @@ homepage = "https://github.com/Craig-Macomber/exist"
 repository = "https://github.com/Craig-Macomber/exist"
 readme = "README.md"
 keywords = ["persistence", "serialization"]
-categories = ["Encoding"]
+categories = ["encoding"]
 license = "MIT"
 
 [badges]
